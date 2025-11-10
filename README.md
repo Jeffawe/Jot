@@ -5,7 +5,7 @@
 > ⚠️ **WARNING: Heavy Development**  
 > jot is currently in active development and not ready for production use. Features are incomplete, APIs will change, and bugs are expected. Use at your own risk.
 
-**jot** is a fully local, privacy-first AI assistant that remembers your clipboard history and terminal commands. Ask questions in natural language and get instant answers—no scrolling, no searching, just results.
+**jot** is a fully local, privacy-first AI assistant that remembers your clipboard history and terminal commands. Ask questions in natural language and get instant answers, no scrolling, no searching, just results.
 
 
 
@@ -46,7 +46,7 @@ jot "what did I work on today?"
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/jot.git
+git clone https://github.com/Jeffawe/Jot
 cd jot
 
 # Build from source
@@ -170,7 +170,6 @@ theme = "system"  # "dark" | "light" | "system"
 - ✅ **Encrypted Storage** - Database encrypted with sqlcipher
 - ✅ **No Telemetry** - Zero analytics or tracking
 - ✅ **Configurable Exclusions** - Block apps, files, or patterns
-- ✅ **Auto-Detection** - Skips passwords, API keys, credit cards
 - ✅ **Open Source** - Fully auditable code
 
 ### Exclusion System
@@ -199,41 +198,6 @@ jot config list-exclusions
 - **AI**: llama-cpp-rs + TinyLlama 1.1B (Phase 2)
 - **GUI**: Tauri (Rust + Web)
 - **CLI**: clap for argument parsing
-
-## 📊 Performance
-
-- **Search Speed**: <50ms for semantic search
-- **Memory Usage**: ~100MB idle, ~300MB active
-- **CPU Usage**: <1% idle, <20% during AI inference
-- **Storage**: ~1-5MB per 1000 items (with embeddings)
-
-## 🗺️ Roadmap
-
-### ✅ Phase 1: Foundation (Current)
-- [x] Clipboard monitoring
-- [x] Terminal history reading
-- [x] SQLite storage
-- [x] Embedding-based search
-- [x] Basic CLI
-- [ ] GUI interface
-
-### 🚧 Phase 2: AI Integration (In Progress)
-- [ ] TinyLlama integration
-- [ ] Command explanations
-- [ ] Activity summaries
-- [ ] Context-aware Q&A
-
-### 📋 Phase 3: Polish & Features
-- [ ] Auto-start on login
-- [ ] Menu bar app (macOS)
-- [ ] Hotkey activation
-- [ ] Export/import history
-- [ ] Backup & sync (optional)
-
-### 🌍 Phase 4: Cross-Platform
-- [ ] Linux support
-- [ ] Windows support
-- [ ] iOS companion app (maybe)
 
 ## 🤝 Contributing
 
@@ -278,9 +242,9 @@ MIT License - see [LICENSE](LICENSE) for details
 
 ## 💬 Support
 
-- 📫 Issues: [GitHub Issues](https://github.com/yourusername/jot/issues)
-- 💭 Discussions: [GitHub Discussions](https://github.com/yourusername/jot/discussions)
-- 🐦 Twitter: [@yourhandle](https://twitter.com/yourhandle)
+- 📫 Issues: [GitHub Issues](https://github.com/jeffawe/jot/issues)
+- 💭 Discussions: [GitHub Discussions](https://github.com/jeffawe/jot/discussions)
+- 🐦 Twitter: [@yourhandle](https://twitter.com/awagu_jeffery)
 
 ---
 
