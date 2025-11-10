@@ -26,15 +26,3 @@ pub fn get_context() -> Result<SimplifiedWindowInfo, Box<dyn std::error::Error>>
 
     Ok(simplified_info)
 }
-
-pub fn print_context() {
-    match get_context() {
-        Ok(simplified_window) => {
-            // This will print ONLY the fields in your SimplifiedWindowInfo
-            println!("active window: {:#?}", simplified_window);
-        }
-        Err(e) => {
-            println!("error occurred while getting the active window: {}", e);
-        }
-    }
-}
