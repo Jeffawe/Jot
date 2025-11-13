@@ -1,22 +1,20 @@
-use copypasta::{ClipboardContext};
+use once_cell::sync::Lazy;  
+use std::sync::Mutex;
 use std::collections::VecDeque;
 
-use crate::types::{ClipboardEntry, SimplifiedWindowInfo};
+use crate::types::{ShellEntry};
+
+const MAX_HISTORY: usize = 100;
+
 
 pub struct ShellMon {
-    ctx: ClipboardContext,
-    pub history: VecDeque<ClipboardEntry>,
-    last_clip: String,
-    last_context: Option<SimplifiedWindowInfo>,
+    pub history: VecDeque<ShellEntry>,
 }
 
 impl ShellMon {
     pub fn new() -> Self {
         Self {
-            ctx: ClipboardContext::new().unwrap(),
-            history: VecDeque::with_capacity(100),
-            last_clip: String::new(),
-            last_context: None,
+            history: VecDeque::with_capacity(MAX_HISTORY),
         }
     }
 
@@ -25,3 +23,7 @@ impl ShellMon {
         Ok(())
     }
 }
+
+pub static GLOBAL_SHELL_MON: Lazy<Mutex<ShellMon>> = Lazy::new(|| {
+    Mutex::new(ShellMon::new())
+});

@@ -1,6 +1,8 @@
 use copypasta::{ClipboardContext, ClipboardProvider};
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
+use once_cell::sync::Lazy;  
+use std::sync::Mutex;
 
 use crate::context::get_context;
 use crate::types::{ClipboardEntry, SimplifiedWindowInfo};
@@ -71,3 +73,7 @@ impl ClipMon {
         Ok(())
     }
 }
+
+pub static GLOBAL_CLIP_MON: Lazy<Mutex<ClipMon>> = Lazy::new(|| {
+    Mutex::new(ClipMon::new())
+});
