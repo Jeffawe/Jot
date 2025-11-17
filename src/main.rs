@@ -2,40 +2,46 @@ use clap::Parser;
 use ctrlc;
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::time::{SystemTime, UNIX_EPOCH};
 
+mod ask;
 mod clipboard;
 mod commands;
 mod context;
+mod db;
+mod embeds;
 mod managers;
 mod pid_controller;
+mod settings;
 mod shell;
 mod types;
-mod ask;
 
-use clipboard::clip_mon::GLOBAL_CLIP_MON;
-use shell::shell_mon::GLOBAL_SHELL_MON;
-use commands::print_help;
-use ask::ask_handler::ask;
-use managers::shutdown_manager::{on_shutdown, shutdown};
-use pid_controller::{is_running, remove_pid, save_pid};
 use types::{Cli, Commands};
 
-const SLEEP_DURATION_SECS: u64 = 1;
-const APP_LOOP_SECS: u64 = 10;
+use ask::ask_handler::ask;
+use ask::search_handler::search;
+use commands::{print_help, show_settings};
 
-// static RUNNING: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
+use clipboard::clip_mon::GLOBAL_CLIP_MON;
+use settings::GLOBAL_SETTINGS;
+use shell::shell_mon::GLOBAL_SHELL_MON;
+
+use db::GLOBAL_DB;
+
+use managers::shutdown_manager::{on_shutdown, shutdown};
+use pid_controller::{is_running, remove_pid, save_pid};
+
+const CLIP_SLEEP_DURATION_SECS: u64 = 1;
+const SHELL_SLEEP_DURATION_SECS: u64 = 10;
+const APP_LOOP_SECS: u64 = 10;
+const MAINTENANCE_INTERVAL_SECS: u64 = 3600;
+
+const SERVICE_NAME: &str = "jotx";
+const SERVICE_NAME_SHORT: &str = "js";
 
 fn main() {
     let cli = Cli::parse();
-
-    // Set up Ctrl+C handler (uses global RUNNING)
-    ctrlc::set_handler(move || {
-        println!("\nCtrl+C received. Shutting down...");
-        shutdown();
-        stop_service();
-    })
-    .expect("Error setting Ctrl+C handler");
 
     on_shutdown(|| {
         println!("  🌐 Closing network connections...");
@@ -45,6 +51,16 @@ fn main() {
         Commands::Run => start_service(),
         Commands::Info => print_help(),
         Commands::Ask { query } => ask(&query),
+        Commands::Cleanup => force_maintain(),
+        Commands::Search { query, print_only } => {
+            if let Some(result) = search(&query, print_only) {
+                if print_only {
+                    print!("{}", result);
+                }
+            } else if print_only {
+                std::process::exit(1);
+            }
+        }
         Commands::Status => {
             if is_running() {
                 println!("jotx is RUNNING");
@@ -52,10 +68,19 @@ fn main() {
                 println!("jotx is STOPPED");
             }
         }
+        Commands::Settings => show_settings(),
         Commands::Exit => stop_service(),
         Commands::InternalDaemon => {
             save_pid();
             run_service();
+        }
+        Commands::Capture {
+            cmd,
+            pwd,
+            user,
+            host,
+        } => {
+            capture_command(&cmd, pwd, user, host);
         }
     }
 }
@@ -68,6 +93,14 @@ fn start_service() {
     }
 
     println!("🚀 Starting application...\n");
+
+    // Set up Ctrl+C handler (uses global RUNNING)
+    ctrlc::set_handler(move || {
+        println!("\nCtrl+C received. Shutting down...");
+        shutdown();
+        stop_service();
+    })
+    .expect("Error setting Ctrl+C handler");
 
     let exe = std::env::current_exe().expect("Failed to get exe path");
 
@@ -119,35 +152,112 @@ pub fn run_service() {
     // Clipboard thread
     thread::spawn(move || {
         while is_running() {
-            // Lock the mutex to get mutable access
-            if let Ok(mut monitor) = GLOBAL_CLIP_MON.lock() {
-                if let Err(e) = monitor.check() {
-                    eprintln!("Clipboard error: {}", e);
+            if let Ok(settings) = GLOBAL_SETTINGS.lock() {
+                if settings.capture_clipboard {
+                    // Lock the mutex to get mutable access
+                    if let Ok(mut monitor) = GLOBAL_CLIP_MON.lock() {
+                        if let Err(e) = monitor.check() {
+                            eprintln!("Clipboard error: {}", e);
+                        }
+                    }
                 }
             }
-            thread::sleep(Duration::from_secs(SLEEP_DURATION_SECS));
+            thread::sleep(Duration::from_secs(CLIP_SLEEP_DURATION_SECS));
         }
     });
 
     // Shell thread
     thread::spawn(move || {
         while is_running() {
-            // Lock the mutex to get mutable access
-            if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
-                if let Err(e) = monitor.check() {
-                    eprintln!("Shell error: {}", e);
+            if let Ok(settings) = GLOBAL_SETTINGS.lock() {
+                if settings.capture_shell {
+                    // Lock the mutex to get mutable access
+                    if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
+                        if let Err(e) = monitor.read_files() {
+                            eprintln!("Shell error: {}", e);
+                        }
+                    }
                 }
             }
-            thread::sleep(Duration::from_secs(SLEEP_DURATION_SECS));
+            thread::sleep(Duration::from_secs(SHELL_SLEEP_DURATION_SECS));
         }
     });
 
     // Main service loop — checks global flag
+    let mut last_maintenance = Instant::now();
+
     while is_running() {
+        if last_maintenance.elapsed().as_secs() >= MAINTENANCE_INTERVAL_SECS {
+            maintain();
+            last_maintenance = Instant::now();
+        }
+
         thread::sleep(Duration::from_secs(APP_LOOP_SECS));
     }
 
     shutdown();
     remove_pid();
     println!("\nGoodbye!");
+}
+
+fn capture_command(cmd: &str, pwd: Option<String>, user: Option<String>, host: Option<String>) {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
+        if cmd.starts_with(SERVICE_NAME) || cmd.starts_with(SERVICE_NAME_SHORT) {
+            return;
+        }
+
+        monitor.add_command(cmd.to_string(), timestamp, pwd, user, host);
+    }
+}
+
+fn maintain() {
+    if let Ok(settings) = GLOBAL_SETTINGS.lock() {
+        if let Ok(db) = GLOBAL_DB.lock() {
+            // Always clean up old entries (this is cheap and frequent)
+            if let Err(e) = db.cleanup_old_entries(settings.clipboard_limit, settings.shell_limit) {
+                eprintln!("Cleanup error: {}", e);
+            }
+
+            // Only run full maintenance if it's been a while (expensive)
+            if db.should_run_maintenance() {
+                if let Err(e) = db.run_maintenance() {
+                    eprintln!("Maintenance error: {}", e);
+                } else {
+                    // Update last maintenance timestamp
+                    if let Err(e) = db.update_last_maintenance() {
+                        eprintln!("Failed to update maintenance timestamp: {}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    print!("Database maintenance completed\n");
+}
+
+fn force_maintain() {
+    if let Ok(settings) = GLOBAL_SETTINGS.lock() {
+        if let Ok(db) = GLOBAL_DB.lock() {
+            // Always clean up old entries (this is cheap and frequent)
+            if let Err(e) = db.cleanup_old_entries(settings.clipboard_limit, settings.shell_limit) {
+                eprintln!("Cleanup error: {}", e);
+            }
+
+            if let Err(e) = db.run_maintenance() {
+                eprintln!("Maintenance error: {}", e);
+            } else {
+                // Update last maintenance timestamp
+                if let Err(e) = db.update_last_maintenance() {
+                    eprintln!("Failed to update maintenance timestamp: {}", e);
+                }
+            }
+        }
+    }
+
+    print!("Database maintenance completed\n");
 }

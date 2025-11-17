@@ -1,17 +1,16 @@
 use copypasta::{ClipboardContext, ClipboardProvider};
-use std::collections::VecDeque;
-use std::time::{SystemTime, UNIX_EPOCH};
-use once_cell::sync::Lazy;  
+use once_cell::sync::Lazy;
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::db::GLOBAL_DB;
 
 use crate::context::get_context;
 use crate::types::{ClipboardEntry, SimplifiedWindowInfo};
-
-const MAX_HISTORY: usize = 100;
+use crate::embeds::{generate_embedding};
 
 pub struct ClipMon {
     ctx: ClipboardContext,
-    pub history: VecDeque<ClipboardEntry>,
     last_clip: String,
     last_context: Option<SimplifiedWindowInfo>,
 }
@@ -20,7 +19,6 @@ impl ClipMon {
     pub fn new() -> Self {
         Self {
             ctx: ClipboardContext::new().unwrap(),
-            history: VecDeque::with_capacity(MAX_HISTORY),
             last_clip: String::new(),
             last_context: None,
         }
@@ -38,7 +36,7 @@ impl ClipMon {
             }
         };
 
-        // 1. New clipboard?
+        // New clipboard?
         if !clip.is_empty() && clip != self.last_clip {
             let entry = ClipboardEntry {
                 timestamp,
@@ -46,12 +44,12 @@ impl ClipMon {
                 content: clip.clone(),
             };
 
-            if self.history.len() >= MAX_HISTORY {
-                self.history.pop_front();
-            }
-
             println!("New clipboard entry: {:?}", entry);
-            self.history.push_back(entry);
+
+            // Write directly to DB
+            if let Err(e) = self.add_to_db(&entry) {
+                eprintln!("Failed to save clipboard to DB: {}", e);
+            }
 
             self.last_clip = clip;
             self.last_context = Some(current_context.clone());
@@ -61,8 +59,7 @@ impl ClipMon {
             if prev != &current_context {
                 println!(
                     "Context → {} – {}",
-                    current_context.info.name,
-                    current_context.title
+                    current_context.info.name, current_context.title
                 );
                 self.last_context = Some(current_context);
             }
@@ -72,8 +69,23 @@ impl ClipMon {
 
         Ok(())
     }
+
+    pub fn add_to_db(&self, entry: &ClipboardEntry) -> Result<(), Box<dyn std::error::Error>> {
+        let db = GLOBAL_DB
+            .lock()
+            .map_err(|e| format!("DB lock error: {}", e))?;
+
+        let embeds = generate_embedding(&entry.content)?;
+
+        db.insert_clipboard(
+            &entry.content,
+            entry.timestamp,
+            &entry.context.info.name,
+            &entry.context.title,
+            Some(embeds),
+        )?;
+        Ok(())
+    }
 }
 
-pub static GLOBAL_CLIP_MON: Lazy<Mutex<ClipMon>> = Lazy::new(|| {
-    Mutex::new(ClipMon::new())
-});
+pub static GLOBAL_CLIP_MON: Lazy<Mutex<ClipMon>> = Lazy::new(|| Mutex::new(ClipMon::new()));

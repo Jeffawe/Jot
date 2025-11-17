@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
-set -e  # Exit on error
+set -e
 
 echo "🔧 Installing Jot CLI globally..."
 echo ""
 
-# Step 1: Install the binary
+# Install Rust if missing
+if ! command -v cargo &> /dev/null; then
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source "$HOME/.cargo/env"
+fi
+
 echo "📦 Building and installing binary..."
+echo "   (First build may take a few minutes to download ONNX runtime...)"
 cargo install --path .
 
-# Step 2: Determine shell config file
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to build jotx"
+    exit 1
+fi
+
+# Determine shell config file
 if [ -n "$ZSH_VERSION" ]; then
     SHELL_RC="$HOME/.zshrc"
     SHELL_NAME="zsh"
@@ -22,20 +33,24 @@ fi
 
 echo ""
 echo "🔍 Detected shell: $SHELL_NAME"
-echo "📝 Config file: $SHELL_RC"
 
-# Step 3: Add to PATH if missing
+# Add to PATH if missing
 if ! grep -q 'export PATH="$HOME/.cargo/bin:$PATH"' "$SHELL_RC" 2>/dev/null; then
     echo "" >> "$SHELL_RC"
     echo '# Added by jotx installer' >> "$SHELL_RC"
     echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$SHELL_RC"
-    echo "✅ Added ~/.cargo/bin to PATH in $SHELL_RC"
+    echo "✅ Added ~/.cargo/bin to PATH"
 else
     echo "ℹ️  ~/.cargo/bin already in PATH"
 fi
 
 echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎉 Installation complete!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "📝 Note: Embedding models will be downloaded automatically"
+echo "   on first use (~50MB for the default model)"
 echo ""
 echo "To use jotx in your current terminal, run:"
 echo "  source $SHELL_RC"

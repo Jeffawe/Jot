@@ -1,23 +1,28 @@
-use crate::clipboard::clip_mon::GLOBAL_CLIP_MON;
-use crate::shell::shell_mon::GLOBAL_SHELL_MON;
+use crate::db::GLOBAL_DB;
+use crate::types::{EntryType, QueryParams};
 
 pub fn ask(query: &str) {
-    if query.is_empty() {  // No parentheses!
+    if query.is_empty() {
+        // No parentheses!
         println!("No query provided.");
         return;
     }
-    
+
     if query.to_lowercase().contains("get last clip history") {
-        if let Ok(monitor) = GLOBAL_CLIP_MON.lock() {
+        if let Ok(monitor) = GLOBAL_DB.lock() {
             // You need to add a print_history method to ClipMon
             // Or access history directly:
-            println!("Clipboard History ({} entries):", monitor.history.len());
-            for entry in &monitor.history {
-                println!("  [{}] {} - {}", 
-                    entry.timestamp, 
-                    entry.context.info.name,
-                    entry.content
-                );
+            let queries = QueryParams {
+                entry_type: Some(EntryType::Clipboard),
+                ..Default::default()
+            };
+
+            if let Ok(entries) = monitor.query_entries(queries) {
+                println!("Clipboard History ({} entries):", entries.len());
+
+                for entry in entries {
+                    println!("  [{}] - {}", entry.timestamp, entry.content);
+                }
             }
         } else {
             println!("Failed to access clipboard history.");
@@ -25,21 +30,25 @@ pub fn ask(query: &str) {
     }
 
     if query.to_lowercase().contains("get last shell history") {
-        if let Ok(monitor) = GLOBAL_SHELL_MON.lock() {
+        if let Ok(monitor) = GLOBAL_DB.lock() {
             // You need to add a print_history method to ClipMon
             // Or access history directly:
-            println!("Clipboard History ({} entries):", monitor.history.len());
-            for entry in &monitor.history {
-                println!("  [{}] {} - {}", 
-                    entry.timestamp, 
-                    entry.context.info.name,
-                    entry.content
-                );
+            let queries = QueryParams {
+                entry_type: Some(EntryType::Shell),
+                ..Default::default()
+            };
+
+            if let Ok(entries) = monitor.query_entries(queries) {
+                println!("Shell History ({} entries):", entries.len());
+
+                for entry in entries {
+                    println!("  [{}] - {}", entry.timestamp, entry.content);
+                }
             }
         } else {
-            println!("Failed to access shell history.");
+            println!("Failed to access clipboard history.");
         }
     }
-    
+
     println!("Your query is: {}", query);
 }
