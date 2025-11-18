@@ -8,11 +8,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod ask;
 mod clipboard;
 mod commands;
+mod config;
 mod context;
 mod db;
 mod embeds;
 mod managers;
 mod pid_controller;
+mod plugin;
 mod settings;
 mod shell;
 mod types;
@@ -22,8 +24,11 @@ use types::{Cli, Commands};
 use ask::ask_handler::ask;
 use ask::search_handler::search;
 use commands::{print_help, show_settings};
+use config::reload_config;
 
 use clipboard::clip_mon::GLOBAL_CLIP_MON;
+use config::GLOBAL_CONFIG;
+use plugin::{CommandContext, DaemonContext, GLOBAL_PLUGIN_MANAGER, SensitiveCommandFilter};
 use settings::GLOBAL_SETTINGS;
 use shell::shell_mon::GLOBAL_SHELL_MON;
 
@@ -33,9 +38,8 @@ use managers::shutdown_manager::{on_shutdown, shutdown};
 use pid_controller::{is_running, remove_pid, save_pid};
 
 const CLIP_SLEEP_DURATION_SECS: u64 = 1;
-const SHELL_SLEEP_DURATION_SECS: u64 = 10;
+const SHELL_SLEEP_DURATION_SECS: u64 = 3600;
 const APP_LOOP_SECS: u64 = 10;
-const MAINTENANCE_INTERVAL_SECS: u64 = 3600;
 
 const SERVICE_NAME: &str = "jotx";
 const SERVICE_NAME_SHORT: &str = "js";
@@ -68,6 +72,7 @@ fn main() {
                 println!("jotx is STOPPED");
             }
         }
+        Commands::Reload => reload(),
         Commands::Settings => show_settings(),
         Commands::Exit => stop_service(),
         Commands::InternalDaemon => {
@@ -101,6 +106,8 @@ fn start_service() {
         stop_service();
     })
     .expect("Error setting Ctrl+C handler");
+
+    initialize_plugins();
 
     let exe = std::env::current_exe().expect("Failed to get exe path");
 
@@ -186,10 +193,26 @@ pub fn run_service() {
     // Main service loop — checks global flag
     let mut last_maintenance = Instant::now();
 
+    let mut daemon_context = DaemonContext {
+        iteration: 0,
+        uptime_secs: 0,
+    };
+
     while is_running() {
-        if last_maintenance.elapsed().as_secs() >= MAINTENANCE_INTERVAL_SECS {
-            maintain();
-            last_maintenance = Instant::now();
+        if let Ok(config) = GLOBAL_CONFIG.lock() {
+            if last_maintenance.elapsed().as_secs()
+                >= config.storage.maintenance_interval_days * 86400
+            {
+                maintain();
+                last_maintenance = Instant::now();
+            }
+        }
+
+        daemon_context.iteration += 1;
+        daemon_context.uptime_secs = get_uptime();
+
+        if let Ok(plugins) = GLOBAL_PLUGIN_MANAGER.lock() {
+            plugins.trigger_daemon_tick(&daemon_context);
         }
 
         thread::sleep(Duration::from_secs(APP_LOOP_SECS));
@@ -198,6 +221,21 @@ pub fn run_service() {
     shutdown();
     remove_pid();
     println!("\nGoodbye!");
+}
+
+pub fn initialize_plugins() {
+    let mut pm = GLOBAL_PLUGIN_MANAGER.lock().unwrap();
+
+    // Register built-in plugins
+    pm.register(Box::new(SensitiveCommandFilter));
+
+    println!("✅ Loaded {} plugins", pm.list().len());
+}
+
+pub fn get_uptime() -> u64 {
+    let now = SystemTime::now();
+    let since_the_epoch = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
+    since_the_epoch.as_secs()
 }
 
 fn capture_command(cmd: &str, pwd: Option<String>, user: Option<String>, host: Option<String>) {
@@ -211,7 +249,19 @@ fn capture_command(cmd: &str, pwd: Option<String>, user: Option<String>, host: O
             return;
         }
 
-        monitor.add_command(cmd.to_string(), timestamp, pwd, user, host);
+        if let Ok(plugins) = GLOBAL_PLUGIN_MANAGER.lock() {
+            let command_capture = CommandContext {
+                command: cmd.to_string(),
+                working_dir: pwd.clone().unwrap_or_default(),
+                user: user.clone().unwrap_or_default(),
+                host: host.clone().unwrap_or_default(),
+                timestamp,
+            };
+
+            if plugins.trigger_command_captured(&command_capture) {
+                monitor.add_command(cmd.to_string(), timestamp, pwd, user, host);
+            }
+        }
     }
 }
 
@@ -260,4 +310,10 @@ fn force_maintain() {
     }
 
     print!("Database maintenance completed\n");
+}
+
+pub fn reload() {
+    if let Err(e) = reload_config() {
+        eprintln!("Failed to reload settings: {}", e);
+    }
 }

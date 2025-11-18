@@ -1,5 +1,9 @@
+use crate::config::GLOBAL_CONFIG;
 use crate::db::GLOBAL_DB;
+use crate::plugin::GLOBAL_PLUGIN_MANAGER;
+
 use crate::embeds::{cosine_similarity, generate_embedding};
+use crate::types::SearchResult;
 use console::Term;
 use dialoguer::Select;
 
@@ -21,7 +25,7 @@ pub fn search(query: &str, print_only: bool) -> Option<String> {
     // Try keyword search first
     match keyword_search(query) {
         Ok(results) if !results.is_empty() => {
-            return display_results_interactive(&results, "Keyword Search Results", print_only)
+            return display_results_interactive(query, &results, "Keyword Search Results", print_only)
                 .map(|r| r.content.clone());
         }
         _ => {
@@ -33,6 +37,7 @@ pub fn search(query: &str, print_only: bool) -> Option<String> {
             match semantic_search(query) {
                 Ok(results) if !results.is_empty() => {
                     return display_results_interactive(
+                        query,
                         &results,
                         "Semantic Search Results",
                         print_only,
@@ -154,6 +159,12 @@ fn semantic_search(query: &str) -> Result<Vec<SearchResult>, Box<dyn std::error:
     // Generate embedding for query
     let query_embedding = generate_embedding(query)?;
 
+    let mut similarity_threshold = 0.5;
+
+    if let Ok(config) = GLOBAL_CONFIG.lock() {
+        similarity_threshold = config.search.similarity_threshold;
+    }
+
     let db = GLOBAL_DB
         .lock()
         .map_err(|e| format!("DB lock error: {}", e))?;
@@ -204,7 +215,7 @@ fn semantic_search(query: &str) -> Result<Vec<SearchResult>, Box<dyn std::error:
     // Only return results with similarity > 0.5 (threshold)
     let filtered: Vec<SearchResult> = results
         .into_iter()
-        .filter(|r| r.similarity > 0.5)
+        .filter(|r| r.similarity > similarity_threshold)
         .take(20)
         .collect();
 
@@ -212,6 +223,7 @@ fn semantic_search(query: &str) -> Result<Vec<SearchResult>, Box<dyn std::error:
 }
 
 fn display_results_interactive<'a>(
+    query: &str,
     results: &'a [SearchResult],
     title: &str,
     print_only: bool,
@@ -240,7 +252,16 @@ fn display_results_interactive<'a>(
         })
         .collect();
 
-    items.truncate(MAX_RESULTS);
+    if let Ok(config) = GLOBAL_CONFIG.lock() {
+        let max_results = config.search.max_results;
+        if max_results > 0 {
+            items.truncate(max_results);
+        } else {
+            items.truncate(MAX_RESULTS);
+        }
+    } else {
+        items.truncate(MAX_RESULTS);
+    }
 
     let selection = Select::new()
         .items(&items)
@@ -249,19 +270,15 @@ fn display_results_interactive<'a>(
 
     let selection = selection.ok()??;
 
+    trigger_plugins(query, results);
+
     Some(&results[selection])
 }
 
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct SearchResult {
-    pub id: i64,
-    pub entry_type: String,
-    pub content: String,
-    pub timestamp: i64,
-    pub times_run: i64,
-    pub working_dir: Option<String>,
-    pub app_name: Option<String>,
-    pub window_title: Option<String>,
-    pub similarity: f32,
+fn trigger_plugins(query: &str, results: &[SearchResult]) {
+    let mut vec: Vec<SearchResult> = results.to_vec();
+
+    if let Ok(plugins) = GLOBAL_PLUGIN_MANAGER.lock() {
+        plugins.trigger_search_after(query, vec.as_mut());
+    }
 }

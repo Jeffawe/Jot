@@ -3,6 +3,7 @@ use rusqlite::Result;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::fmt;
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -75,6 +76,8 @@ pub enum Commands {
     },
     /// Show service status
     Status,
+    /// Reload configs
+    Reload,
     /// Show settings
     Settings,
     /// Cleanup old entries
@@ -186,4 +189,30 @@ impl FromSql for EntryType {
             })
         })
     }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub id: i64,
+    pub entry_type: String,
+    pub content: String,
+    pub timestamp: i64,
+    pub times_run: i64,
+    pub working_dir: Option<String>,
+    pub app_name: Option<String>,
+    pub window_title: Option<String>,
+    pub similarity: f32,
+}
+
+// ============================================================================
+// PLUGIN ACTIONS - What plugins can do
+// ============================================================================
+
+#[derive(Debug)]
+pub enum PluginAction {
+    Continue,                          // Continue to next plugin
+    Stop,                              // Stop processing, don't run remaining plugins
+    ModifyData,                        // Data was modified, continue with modified data
+    Skip,                              // Skip this operation entirely
 }
