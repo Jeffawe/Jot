@@ -28,6 +28,7 @@
 *.profumo
 *.profraw
 *.profdata
+.fastembed_cache/
 
 #-------------------------------------------------------------------------------
 # Operating System and Editor/IDE Files
