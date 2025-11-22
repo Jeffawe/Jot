@@ -30,6 +30,7 @@ ja "email address from this morning"
 # Find that yarn command to run the server
 js "yarn"
 → yarn start
+```
 
 ## 🚀 Quick Start
 
