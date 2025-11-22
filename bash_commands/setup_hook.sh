@@ -23,15 +23,22 @@ BASH_SEARCH_WRAPPER='jotx() {
         shift
         local result=$(command jotx search "$@" --print-only)
         if [ -n "$result" ]; then
-            # Just print it - user can copy/paste or use up arrow
             echo "Found: $result"
             history -s "$result"  # Add to history for ↑ arrow access
-        fi 
+        fi
+    elif [ "$1" = "ask" ]; then
+        shift
+        local result=$(command jotx ask "$@" --print-only)
+        if [ -n "$result" ]; then
+            echo "Found: $result"
+            history -s "$result"  # Add to history for ↑ arrow access
+        fi
     else
         command jotx "$@"
     fi
 }
-js() { jotx search "$@"; }'
+js() { jotx search "$@"; }
+ja() { jotx ask "$@"; }'
 
 # Zsh search wrapper - uses print -z (Zsh built-in)
 ZSH_SEARCH_WRAPPER='jotx() {
@@ -40,12 +47,19 @@ ZSH_SEARCH_WRAPPER='jotx() {
         local result=$(command jotx search "$@" --print-only)
         if [ -n "$result" ]; then
             print -z "$result"
-        fi 
+        fi
+    elif [ "$1" = "ask" ]; then
+        shift
+        local result=$(command jotx ask "$@" --print-only)
+        if [ -n "$result" ]; then
+            print -z "$result"
+        fi
     else
         command jotx "$@"
     fi
 }
-js() { jotx search "$@"; }'
+js() { jotx search "$@"; }
+ja() { jotx ask "$@"; }'
 
 add_hook() {
     local rc_file=$1
@@ -109,4 +123,3 @@ echo "   - Commands are automatically captured"
 echo "   - Type 'jotx search <query>' or 'js <query>' to search and insert command"
 echo "   - Example: jotx search echo"
 echo "   - Example: js git"
-echo "   - Other commands work normally: jotx status, jotx capture, etc."

@@ -1,54 +1,96 @@
 use crate::db::GLOBAL_DB;
-use crate::types::{EntryType, QueryParams};
+use crate::llm::{GLOBAL_LLM, LLMQueryParams};
+use crate::commands::get_working_directory;
 
-pub fn ask(query: &str) {
-    if query.is_empty() {
-        // No parentheses!
-        println!("No query provided.");
-        return;
-    }
+use super::fingerprint::QueryFingerprint;
+use super::intent::{Intent, classify_intent};
+use super::search_handler::{display_results_interactive, search_with_llm_params};
+use super::semantic::semantic_search;
 
-    if query.to_lowercase().contains("get last clip history") {
-        if let Ok(monitor) = GLOBAL_DB.lock() {
-            // You need to add a print_history method to ClipMon
-            // Or access history directly:
-            let queries = QueryParams {
-                entry_type: Some(EntryType::Clipboard),
-                ..Default::default()
-            };
+#[derive(Debug)]
+pub enum AskResponse {
+    Knowledge(String),
+    SearchResults(Option<String>),
+}
 
-            if let Ok(entries) = monitor.query_entries(queries) {
-                println!("Clipboard History ({} entries):", entries.len());
+pub async fn ask(
+    query: &str,
+    directory: &str,
+    print_only: bool,
+) -> Result<AskResponse, Box<dyn std::error::Error>> {
+    // Step 1: Classify intent
+    let intent = classify_intent(query);
 
-                for entry in entries {
-                    println!("  [{}] - {}", entry.timestamp, entry.content);
-                }
+    let mut db = match GLOBAL_DB.lock() {
+        Ok(db) => db,
+        Err(e) => return Err(format!("DB lock failed: {}", e).into()),
+    };
+
+    let mut llm_daemon = GLOBAL_LLM
+        .lock()
+        .map_err(|e| format!("LLM lock failed: {}", e))?;
+
+    match llm_daemon.get_llm().await {
+        Ok(_) => {}
+        Err(e) => {
+            return Err(format!("LLM initialization failed: {}. Use jotx handlellm to fix", e).into());
+        } 
+    };
+
+    match intent {
+        Intent::Knowledge => {
+            // Direct LLM answer (no search)
+            let answer = llm_daemon.answer_question(query).await?;
+            Ok(AskResponse::Knowledge(answer))
+        }
+
+        Intent::Retrieval => {
+            // Three-tier cache system
+
+            // Tier 2: Fingerprint cache
+            let fingerprint = QueryFingerprint::from_query(query);
+
+            if let Some(params) = db.cache.find_match(&fingerprint, 0.80) {
+                // RECORD THE HIT!
+                db.cache.record_hit(query)?;
+                let results = execute_search(&params, query, print_only)?;
+                return Ok(AskResponse::SearchResults(results));
             }
-        } else {
-            println!("Failed to access clipboard history.");
+
+            // Tier 3: LLM fallback
+            let params = llm_daemon.interpret_query(query, directory).await?;
+
+            // Cache for next time
+            db.cache.insert(query, fingerprint, params.clone())?;
+
+            let results = execute_search(&params, query, print_only)?;
+            Ok(AskResponse::SearchResults(results))
         }
     }
+}
 
-    if query.to_lowercase().contains("get last shell history") {
-        if let Ok(monitor) = GLOBAL_DB.lock() {
-            // You need to add a print_history method to ClipMon
-            // Or access history directly:
-            let queries = QueryParams {
-                entry_type: Some(EntryType::Shell),
-                ..Default::default()
-            };
-
-            if let Ok(entries) = monitor.query_entries(queries) {
-                println!("Shell History ({} entries):", entries.len());
-
-                for entry in entries {
-                    println!("  [{}] - {}", entry.timestamp, entry.content);
-                }
+fn execute_search(
+    params: &LLMQueryParams,
+    query: &str,
+    print_only: bool,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let context = get_working_directory();
+    let results = if params.use_semantic {
+        let query_text = params.keywords.join(" ");
+        let result = semantic_search(&query_text);
+        result?
+    } else {
+        match search_with_llm_params(params, &context, print_only) {
+            Ok(res) => res,
+            Err(e) => {
+                return Err(format!("Search failed: {}", e).into());
             }
-        } else {
-            println!("Failed to access clipboard history.");
         }
-    }
+    };
 
-    println!("Your query is: {}", query);
+    let results =
+        display_results_interactive(query, &results, "Keyword Search Results", print_only)
+            .map(|r| r.content.clone());
+
+    return Ok(results);
 }

@@ -12,6 +12,7 @@ mod config;
 mod context;
 mod db;
 mod embeds;
+mod llm;
 mod managers;
 mod pid_controller;
 mod plugin;
@@ -21,21 +22,26 @@ mod types;
 
 use types::{Cli, Commands};
 
-use ask::ask_handler::ask;
+use ask::ask_handler::{AskResponse, ask};
 use ask::search_handler::search;
-use commands::{print_help, show_settings};
+use commands::{get_working_directory, show_settings, run_make};
 use config::reload_config;
+use llm::handle_llm;
 
 use clipboard::clip_mon::GLOBAL_CLIP_MON;
 use config::GLOBAL_CONFIG;
-use plugin::{CommandContext, DaemonContext, GLOBAL_PLUGIN_MANAGER, SensitiveCommandFilter};
+use db::GLOBAL_DB;
+use plugin::{
+    CommandContext, DaemonContext, GLOBAL_PLUGIN_MANAGER, SensitiveCommandFilter,
+    check_plugin_functions, create_new_plugin_script,
+};
 use settings::GLOBAL_SETTINGS;
 use shell::shell_mon::GLOBAL_SHELL_MON;
 
-use db::GLOBAL_DB;
-
 use managers::shutdown_manager::{on_shutdown, shutdown};
 use pid_controller::{is_running, remove_pid, save_pid};
+
+use crate::commands::get_plugin_dir;
 
 const CLIP_SLEEP_DURATION_SECS: u64 = 1;
 const SHELL_SLEEP_DURATION_SECS: u64 = 3600;
@@ -44,7 +50,8 @@ const APP_LOOP_SECS: u64 = 10;
 const SERVICE_NAME: &str = "jotx";
 const SERVICE_NAME_SHORT: &str = "js";
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
 
     on_shutdown(|| {
@@ -53,11 +60,25 @@ fn main() {
 
     match cli.command {
         Commands::Run => start_service(),
-        Commands::Info => print_help(),
-        Commands::Ask { query } => ask(&query),
+        Commands::Ask { query, print_only } => {
+            let pwd = get_working_directory();
+
+            let ask_result = ask(&query, &pwd, print_only);
+            if let Some(result) = ask_to_string(ask_result.await) {
+                if print_only {
+                    print!("{}", result);
+                }
+            } else if print_only {
+                std::process::exit(1);
+            }
+        }
         Commands::Cleanup => force_maintain(),
         Commands::Search { query, print_only } => {
-            if let Some(result) = search(&query, print_only) {
+            let pwd = std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| String::from(""));
+
+            if let Some(result) = search(&query, &pwd, print_only) {
                 if print_only {
                     print!("{}", result);
                 }
@@ -70,6 +91,39 @@ fn main() {
                 println!("jotx is RUNNING");
             } else {
                 println!("jotx is STOPPED");
+            }
+        }
+        Commands::HandleLlm => match handle_llm().await {
+            Ok(_) => println!("✅ LLM setup completed successfully."),
+            Err(e) => eprintln!("❌ LLM setup failed: {}", e),
+        },
+        Commands::Plugin(args) => {
+            if args.create {
+                // Logic for jotx plugin --create <NAME>
+                if let Some(name) = args.name {
+                    let plugin_dir = get_plugin_dir();
+                    let result = create_new_plugin_script(&plugin_dir, &name);
+                    match result {
+                        Ok(path) => println!("✅ Plugin created at: {}", path),
+                        Err(e) => eprintln!("❌ Error creating plugin: {}", e),
+                    }
+                } else {
+                    eprintln!("Error: --create requires a plugin name.");
+                }
+            } else if let Some(target) = args.check {
+                // Logic for jotx plugin --check <NAME> or --check all
+                let result;
+                if target == "all" || target.is_empty() {
+                    result = check_plugin_functions(&get_plugin_dir(), None);
+                } else {
+                    result = check_plugin_functions(&get_plugin_dir(), Some(&target));
+                }
+                match result {
+                    Ok(_) => println!("✅ Plugin check completed successfully."),
+                    Err(e) => eprintln!("❌ Plugin check failed: {}", e),
+                }
+            } else {
+                println!("Plugin command requires --create or --check.");
             }
         }
         Commands::Reload => reload(),
@@ -87,6 +141,8 @@ fn main() {
         } => {
             capture_command(&cmd, pwd, user, host);
         }
+        Commands::CleanData => run_make("clean-data"),
+        Commands::Uninstall => run_make("uninstall"),
     }
 }
 
@@ -315,5 +371,12 @@ fn force_maintain() {
 pub fn reload() {
     if let Err(e) = reload_config() {
         eprintln!("Failed to reload settings: {}", e);
+    }
+}
+
+fn ask_to_string(resp: Result<AskResponse, Box<dyn std::error::Error>>) -> Option<String> {
+    match resp.ok()? {
+        AskResponse::Knowledge(s) => Some(s),
+        AskResponse::SearchResults(opt) => opt,
     }
 }

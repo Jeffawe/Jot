@@ -9,9 +9,7 @@ use std::sync::{Mutex};
 pub struct Config {
     pub llm: LlmConfig,
     pub search: SearchConfig,
-    pub predict: PredictConfig,
-    pub privacy: PrivacyConfig,
-    pub storage: StorageConfig,
+    pub storage: StorageConfig
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -33,21 +31,6 @@ pub struct SearchConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct PredictConfig {
-    pub enabled: bool,
-    pub min_association_strength: i64,
-    pub show_inline: bool,
-    pub auto_suggest_delay_ms: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct PrivacyConfig {
-    pub ignore_patterns: Vec<String>,
-    pub ignore_commands: Vec<String>,
-    pub send_to_llm: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct StorageConfig {
     pub maintenance_interval_days: u64,
 }
@@ -59,7 +42,7 @@ impl Default for Config {
                 provider: "ollama".to_string(),
                 api_key: None,
                 api_base: Some("http://localhost:11434".to_string()),
-                model: "llama3.2".to_string(),
+                model: "llama2".to_string(),
                 max_tokens: 500,
                 temperature: 0.7,
                 max_history_results: 10,
@@ -68,21 +51,6 @@ impl Default for Config {
                 similarity_threshold: 0.5,
                 max_results: 10,
                 fuzzy_matching: true,
-            },
-            predict: PredictConfig {
-                enabled: true,
-                min_association_strength: 3,
-                show_inline: true,
-                auto_suggest_delay_ms: 500,
-            },
-            privacy: PrivacyConfig {
-                ignore_patterns: vec![
-                    "password".to_string(),
-                    "token".to_string(),
-                    "secret".to_string(),
-                ],
-                ignore_commands: vec!["pass".to_string()],
-                send_to_llm: false,
             },
             storage: StorageConfig {
                 maintenance_interval_days: 7,
@@ -98,7 +66,6 @@ impl Config {
         
         // If config doesn't exist, create default
         if !config_path.exists() {
-            println!("📝 Creating default config at: {}", config_path.display());
             let default = Config::default();
             default.save()?;
             return Ok(default);
@@ -166,7 +133,6 @@ mod tests {
     fn test_default_config() {
         let config = Config::default();
         assert_eq!(config.llm.provider, "ollama");
-        assert_eq!(config.predict.enabled, true);
     }
     
     #[test]

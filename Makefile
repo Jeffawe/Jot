@@ -1,4 +1,4 @@
-.PHONY: all install hooks setup start stop status clean rebuild help
+.PHONY: all install hooks setup start stop status clean rebuild help uninstall install-llm clean-data clean-llm dev-build dev-run dev-test dev-check logs errors db-info restart
 
 # Default target
 all: help
@@ -12,6 +12,8 @@ else ifeq ($(UNAME),Linux)
 else
     OS := windows
 endif
+
+JOTX_DIR := $(HOME)/.jotx
 
 help:
 	@echo "Jotx - Digital Memory CLI"
@@ -34,18 +36,44 @@ install:
 	@chmod +x ./bash_commands/install_jot.sh
 	@./bash_commands/install_jot.sh
 
+install-llm:
+	@echo "📦 Jotx requires Ollama to work. We will install it for you!"
+	@echo ""
+	@read -p "Continue with installation? (y/N) " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		chmod +x ./bash_commands/install_llm.sh; \
+		if ./bash_commands/install_llm.sh; then \
+			echo ""; \
+			echo "✅ LLM setup complete! You can now use: jotx ask <query>"; \
+		else \
+			echo ""; \
+			echo "❌ Installation failed. Try running:"; \
+			echo "   make install-llm or use jotx handle-llm"; \
+			exit 1; \
+		fi \
+	else \
+		echo "❌ Cancelled"; \
+		echo "   You can install later with: make install-llm or use jotx handle-llm"; \
+	fi
+
 hooks:
 	@echo "🔗 Setting up shell hooks..."
 	@chmod +x ./bash_commands/setup_hook.sh
 	@./bash_commands/setup_hook.sh
 	@echo "Please run: source ~/.zshrc  (or ~/.bashrc) for all terminal sessions or restart your terminal"
 
-setup: install hooks
+setup: install hooks install-llm
+	@mkdir -p $(JOTX_DIR)
+	@echo "$(PWD)" > $(JOTX_DIR)/path
+	@echo ""
+	@echo "📁 Saved repo path to $(JOTX_DIR)/path"
+	@echo "   -> $(PWD)"
 	@echo ""
 	@echo "✅ Setup complete!"
 	@echo ""
 	@echo "Please run: source ~/.zshrc  (or ~/.bashrc) for all terminal sessions or restart your terminal"
-	@echo "Then start jotx with: jotx start"
+	@echo "Then start jotx with: jotx run"
 
 start:
 	@echo "▶️  Starting jotx daemon..."
@@ -82,7 +110,7 @@ rebuild: clean install
 	@echo "✅ Rebuild complete"
 	@echo "Please run: source ~/.zshrc  (or ~/.bashrc) for all terminal sessions or restart your terminal"
 
-uninstall: stop clean clean-data
+uninstall: stop clean clean-data clean-llm
 	@echo "🗑️  Uninstalling jotx..."
 	@cargo uninstall jotx || echo "Binary already removed"
 	@echo ""
@@ -109,6 +137,68 @@ uninstall: stop clean clean-data
 	@echo ""
 	@echo "✅ Uninstall complete"
 	@echo "   Run 'source ~/.zshrc' (or ~/.bashrc) to reload your shell"
+
+clean-llm:
+	@echo "🤖 LLM Cleanup Options"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "This will let you:"
+	@echo "  • Remove downloaded Ollama models"
+	@echo "  • Optionally uninstall Ollama itself"
+	@echo ""
+	@read -p "Continue? (y/N) " -n 1 -r; \
+	echo; \
+	if [[ ! $$REPLY =~ ^[Yy]$$ ]]; then \
+		echo "❌ Cancelled"; \
+		exit 0; \
+	fi; \
+	echo ""; \
+	if command -v ollama &> /dev/null; then \
+		echo "📦 Installed Ollama models:"; \
+		ollama list || echo "   (none)"; \
+		echo ""; \
+		read -p "Remove Ollama models? (y/N) " -n 1 -r; \
+		echo; \
+		if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+			for model in $$(ollama list | tail -n +2 | awk '{print $$1}'); do \
+				if [ -n "$$model" ]; then \
+					echo "  🗑️  Removing $$model..."; \
+					ollama rm $$model 2>/dev/null || true; \
+				fi \
+			done; \
+			echo "✅ Models removed"; \
+		else \
+			echo "ℹ️  Keeping models"; \
+		fi; \
+		echo ""; \
+		read -p "Uninstall Ollama completely? (y/N) " -n 1 -r; \
+		echo; \
+		if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+			echo "🗑️  Uninstalling Ollama..."; \
+			if [[ "$$OSTYPE" == "darwin"* ]]; then \
+				if command -v brew &> /dev/null && brew list ollama &> /dev/null; then \
+					brew uninstall ollama; \
+				else \
+					sudo rm -f /usr/local/bin/ollama; \
+					rm -rf ~/.ollama; \
+				fi; \
+			else \
+				sudo systemctl stop ollama 2>/dev/null || true; \
+				sudo systemctl disable ollama 2>/dev/null || true; \
+				sudo rm -f /usr/local/bin/ollama; \
+				sudo rm -f /etc/systemd/system/ollama.service; \
+				sudo rm -rf /usr/share/ollama; \
+				rm -rf ~/.ollama; \
+			fi; \
+			echo "✅ Ollama uninstalled"; \
+		else \
+			echo "ℹ️  Keeping Ollama (you can use it for other projects)"; \
+		fi; \
+	else \
+		echo "ℹ️  Ollama not installed"; \
+	fi; \
+	echo ""; \
+	echo "✅ LLM cleanup complete"
 
 # Development targets
 dev-build:

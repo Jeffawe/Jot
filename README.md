@@ -2,41 +2,34 @@
 
 > Your digital memory. Search everything you've copied or typed, instantly.
 
-> ⚠️ **WARNING: Heavy Development**  
-> jot is currently in active development and not ready for production use. Features are incomplete, APIs will change, and bugs are expected. Use at your own risk.
+> ⚠️ **WARNING: Active Development**  
+> jot is currently in active development and not ready for production use. Features are incomplete and bugs are expected.
 
 **jot** is a fully local, privacy-first AI assistant that remembers your clipboard history and terminal commands. Ask questions in natural language and get instant answers, no scrolling, no searching, just results.
 
-
-
 ## ✨ Features
 
-- 🔍 **Semantic Search** - Find things by meaning, not just keywords
-- 🤖 **Local AI** - Explain commands, summarize activity, answer questions
+- 🔍 **Natural Language Search** - Find things by meaning, not just keywords
 - 🔒 **100% Private** - Everything stays on your machine, encrypted
 - ⚡ **Lightning Fast** - Search 10,000+ items in milliseconds
 - 🎨 **Dual Interface** - Beautiful GUI or blazing-fast CLI
 - 🧠 **Context Aware** - Understands what you're looking for
+- 🧩 **Plugin Ready** - Extend Jot with custom Rhai plugins that tap into lifecycle events.
 
 ## 🎯 Use Cases
 
 ```bash
 # Instead of scrolling through terminal history
-jot "ssh command for staging server"
+jotx ask "ssh command for staging server"
 → ssh user@staging.example.com -i ~/.ssh/key.pem
 
 # Find that email you copied hours ago
-jot "email address from this morning"
+ja "email address from this morning"
 → john.doe@example.com
 
-# Get explanations
-jot explain "docker run -p 3000:3000 --rm myapp"
-→ This command runs a Docker container...
-
-# Summarize your day
-jot "what did I work on today?"
-→ You worked on: SSH configurations, Docker deployments...
-```
+# Find that yarn command to run the server
+js "yarn"
+→ yarn start
 
 ## 🚀 Quick Start
 
@@ -49,74 +42,48 @@ jot "what did I work on today?"
 git clone https://github.com/Jeffawe/Jot
 cd jot
 
-# Build from source
-cargo build --release
-
-# Install
-cargo install --path .
+# Run the make command
+make setup
 ```
 
 ### First Run
 
 ```bash
 # Start monitoring (runs in background)
-jot monitor
+jotx run
 
 # Search your history
-jot search "ssh"
+jotx search "ssh"
 
 # Ask questions
-jot ask "what was that git command from yesterday?"
+jotx ask "what was that git command from yesterday?"
 ```
 
 ## 📖 How It Works
 
-### Phase 1: Semantic Search (Current)
+### Natural Language Search
 
 1. **Monitors** your clipboard and terminal silently in the background
-2. **Stores** everything locally in an encrypted SQLite database
+2. **Stores** everything locally in a local SQLite database
 3. **Indexes** content using embedding models for semantic search
 4. **Searches** using natural language to find what you need
-
-### Phase 2: Local AI (Coming Soon)
-
-- **TinyLlama 1.1B** for explanations and summaries
-- **Context-aware** responses based on your history
-- **Privacy-first** - model runs entirely on your machine
-
-## 💻 Usage
 
 ### CLI Commands
 
 ```bash
 # Start clipboard & terminal monitoring
-jot monitor
+jotx run
 
 # Search with natural language
-jot search "docker command with port mapping"
-jot search "email from sarah" --limit 10
-
-# Explain a command (Phase 2)
-jot explain "ssh -L 8080:localhost:80 user@server"
-
-# View recent history
-jot recent
-jot recent --count 20
-
-# Clear history
-jot clear --before "7 days ago"
-jot clear --all
-
-# Configure
-jot config edit
-jot config show
+jotx ask "docker command with port mapping"
+jotx search "yarn" 
 ```
 
 ### GUI Mode
 
 ```bash
 # Launch the desktop app
-jot gui
+jotx gui
 
 # Or use global hotkey (configurable)
 Cmd+Shift+J  # macOS default
@@ -124,42 +91,24 @@ Cmd+Shift+J  # macOS default
 
 ## ⚙️ Configuration
 
-Configuration file: `~/.jot/config.toml`
+Configuration file: `~/.jotx/config.toml`
 
 ```toml
-[monitoring]
-clipboard_enabled = true
-terminal_enabled = true
-poll_interval_ms = 500
-
-[storage]
-retention_days = 30
-max_db_size_mb = 500
-db_path = "~/.jot/history.db"
+[llm]
+provider = "ollama"
+api_base = "http://localhost:11434"
+model = "llama2"
+max_tokens = 500
+temperature = 0.7
+max_history_results = 10
 
 [search]
-embedding_model = "all-MiniLM-L6-v2"
-similarity_threshold = 0.7
+similarity_threshold = 0.5
 max_results = 10
+fuzzy_matching = true
 
-[privacy]
-# Exclude sensitive apps (password managers, etc.)
-exclude_apps = ["1Password", "Bitwarden", "Keychain Access"]
-
-# Exclude file patterns
-exclude_patterns = ["*.env", "*.key", "*.pem", "*.password"]
-
-# Exclude folders
-exclude_folders = ["/secrets/", "~/.ssh/"]
-
-# Auto-detect and exclude sensitive data
-auto_detect_passwords = true
-auto_detect_api_keys = true
-auto_detect_credit_cards = true
-
-[ui]
-hotkey = "Cmd+Shift+J"
-theme = "system"  # "dark" | "light" | "system"
+[storage]
+maintenance_interval_days = 7
 ```
 
 ## 🔒 Privacy & Security
@@ -167,35 +116,35 @@ theme = "system"  # "dark" | "light" | "system"
 **jot** is built privacy-first:
 
 - ✅ **100% Local** - No data ever leaves your machine
-- ✅ **Encrypted Storage** - Database encrypted with sqlcipher
 - ✅ **No Telemetry** - Zero analytics or tracking
-- ✅ **Configurable Exclusions** - Block apps, files, or patterns
+- ✅ **Configurable Exclusions** - Block apps, files, or patterns (In development)
 - ✅ **Open Source** - Fully auditable code
+- ✅ **Clean Data** - Clean data stored anytime easily
 
-### Exclusion System
+<!-- ### Exclusion System
 
 Protect sensitive data automatically:
 
 ```bash
 # Exclude specific apps
-jot config exclude-app "1Password"
+jotx config exclude-app "1Password"
 
 # Exclude file patterns
-jot config exclude-pattern "*.env"
+jotx config exclude-pattern "*.env"
 
 # Exclude folders
-jot config exclude-folder "~/Documents/Private"
+jotx config exclude-folder "~/Documents/Private"
 
 # View exclusions
-jot config list-exclusions
-```
+jotx config list-exclusions
+``` -->
 
 ## 🛠️ Tech Stack
 
 - **Language**: Rust 🦀
-- **Storage**: SQLite with sqlcipher encryption
+- **Storage**: SQLite
 - **Search**: fastembed (embedding models)
-- **AI**: llama-cpp-rs + TinyLlama 1.1B (Phase 2)
+- **AI**: Ollama
 - **GUI**: Tauri (Rust + Web)
 - **CLI**: clap for argument parsing
 
@@ -211,13 +160,10 @@ git clone https://github.com/yourusername/jot.git
 cd jot
 
 # Install dependencies
-cargo build
+make dev-build OR cargo build
 
 # Run tests
 cargo test
-
-# Run with logging
-RUST_LOG=debug cargo run -- monitor
 ```
 
 ### Areas for Contribution
@@ -237,14 +183,14 @@ Apache License - see [LICENSE](LICENSE) for details
 
 - Built with [Rust](https://www.rust-lang.org/)
 - Embeddings via [fastembed](https://github.com/Anush008/fastembed-rs)
-- AI via [llama.cpp](https://github.com/ggerganov/llama.cpp)
+- AI via [Ollama](https://ollama.com) for running local LLMs
 - Inspired by the need to remember things better
 
 ## 💬 Support
 
 - 📫 Issues: [GitHub Issues](https://github.com/jeffawe/jot/issues)
 - 💭 Discussions: [GitHub Discussions](https://github.com/jeffawe/jot/discussions)
-- 🐦 Twitter: [@yourhandle](https://twitter.com/awagu_jeffery)
+- 🐦 Twitter: [@awagu_jeffery](https://twitter.com/awagu_jeffery)
 
 ---
 

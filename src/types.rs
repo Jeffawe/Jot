@@ -1,11 +1,10 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, Args};
 use rusqlite::Result;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct ClipboardEntry {
     pub timestamp: u64,
@@ -59,35 +58,62 @@ pub struct Cli {
     pub command: Commands,
 }
 
+#[derive(Debug, Args)]
+pub struct PluginArgs {
+    /// Creates a new plugin script with the given name (requires a name argument).
+    #[arg(long, conflicts_with = "check")]
+    pub create: bool,
+
+    /// Checks the functions exported by the specified plugin, or all plugins (e.g., --check my_plugin or --check all).
+    #[arg(long, value_name = "PLUGIN_NAME")]
+    pub check: Option<String>,
+    
+    /// The name of the plugin script to create or act upon (positional argument).
+    #[arg(value_name = "PLUGIN_NAME")]
+    pub name: Option<String>,
+}
+
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Start the clipboard/shell monitor (interactive mode)
+    /// Start the clipboard/shell monitor
     Run,
-    /// Show help info
-    Info,
-    /// Ask a question
-    Ask { query: String },
-    /// Search your history
+    /// Search using natutal language (alternatively use ja <QUERY>)
+    Ask {
+        query: String,
+
+        #[arg(long)]
+        print_only: bool,
+    },
+    /// Search using keywords (alternatively use js <QUERY>)
     Search {
         query: String,
 
         #[arg(long)]
         print_only: bool,
     },
+    /// Use Plugins
+    Plugin(PluginArgs),
     /// Show service status
     Status,
     /// Reload configs
     Reload,
+    /// Handle LLm setup and configuration
+    HandleLlm,
     /// Show settings
     Settings,
-    /// Cleanup old entries
+    /// Cleanup database and optimize
     Cleanup,
+    /// Clean All Data
+    CleanData,
     /// Gracefully stop the running service
     Exit,
+    /// Uninstall jotx service and remove data
+    Uninstall,
 
     #[command(hide = true)] // Hide from help menu
     InternalDaemon,
 
+    #[command(hide = true)] 
     Capture {
         #[arg(long)]
         cmd: String,
@@ -104,6 +130,7 @@ pub enum Commands {
 }
 
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct QueryParams {
     pub entry_type: Option<EntryType>,
     pub content_search: Option<String>,
@@ -138,6 +165,7 @@ pub enum EntryType {
     Shell,
 }
 
+#[allow(dead_code)]
 impl EntryType {
     pub fn as_str(&self) -> &str {
         match self {
@@ -200,6 +228,7 @@ pub struct SearchResult {
     pub timestamp: i64,
     pub times_run: i64,
     pub working_dir: Option<String>,
+    pub host: Option<String>,
     pub app_name: Option<String>,
     pub window_title: Option<String>,
     pub similarity: f32,
@@ -211,8 +240,8 @@ pub struct SearchResult {
 
 #[derive(Debug)]
 pub enum PluginAction {
-    Continue,                          // Continue to next plugin
-    Stop,                              // Stop processing, don't run remaining plugins
-    ModifyData,                        // Data was modified, continue with modified data
-    Skip,                              // Skip this operation entirely
+    Continue,   // Continue to next plugin
+    Stop,       // Stop processing, don't run remaining plugins
+    ModifyData, // Data was modified, continue with modified data
+    Skip,       // Skip this operation entirely
 }

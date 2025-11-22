@@ -48,11 +48,6 @@ pub trait Plugin: Send + Sync {
     fn on_daemon_tick(&self, _context: &DaemonContext) -> Result<PluginAction, String> {
         Ok(PluginAction::Continue)
     }
-    
-    /// Called before prediction is shown
-    fn on_predict(&self, _context: &PredictContext) -> Result<PluginAction, String> {
-        Ok(PluginAction::Continue)
-    }
 }
 
 // ============================================================================
@@ -79,13 +74,6 @@ pub struct LlmContext {
 pub struct DaemonContext {
     pub iteration: u64,
     pub uptime_secs: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PredictContext {
-    pub last_command: String,
-    pub predicted_command: String,
-    pub strength: i64,
 }
 
 // ============================================================================
@@ -215,7 +203,5 @@ impl Plugin for ExternalPlugin {
         
         Ok(PluginAction::Continue)
     }
-    
-    // Similar implementations for other hooks...
 }
 

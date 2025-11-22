@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║  JotX LLM Global Installation ║${NC}"
+echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
+echo ""
+
 echo "🔧 Installing Jot CLI globally..."
 echo ""
 
@@ -45,9 +50,9 @@ else
 fi
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🎉 Installation complete!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║     🎉 Installation Complete!        ║${NC}"
+echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
 echo ""
 echo "📝 Note: Embedding models will be downloaded automatically"
 echo "   on first use (~50MB for the default model)"
@@ -55,8 +60,4 @@ echo ""
 echo "To use jotx in your current terminal, run:"
 echo "  source $SHELL_RC"
 echo ""
-echo "Then you can run jotx from anywhere:"
-echo "  jotx run      # Start the service"
-echo "  jotx status   # Check if running"
-echo "  jotx exit     # Stop the service"
-echo ""
+echo "Run jotx help to get started and see available commands."

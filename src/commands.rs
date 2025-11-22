@@ -1,15 +1,6 @@
-use crate::settings::GLOBAL_SETTINGS;
-use std::io::{self, Write};
-
-pub fn print_help() {
-    println!("Available commands:");
-    println!("  run - Start the clipboard/shell monitor (interactive mode)");
-    println!("  help - Show help info");
-    println!("  exit - Gracefully stop the running service");
-    println!("  status - Show service status");
-    println!("  ask - Ask a question");
-}
-
+use crate::{settings::GLOBAL_SETTINGS};
+use std::{fs, io::{self, Write}, path::PathBuf};
+use std::process::Command;
 
 pub fn show_settings() {
     loop {
@@ -66,4 +57,43 @@ pub fn show_settings() {
     }
     
     println!("Settings saved!");
+}
+
+pub fn get_working_directory() -> String {
+    let pwd = std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| String::from(""));
+    pwd
+}
+
+pub fn get_plugin_dir() -> PathBuf {
+    let home = std::env::var("HOME").expect("HOME not set");
+    let plugin_dir = PathBuf::from(home).join(".jotx").join("plugins");
+    plugin_dir
+}
+
+fn load_repo_path() -> PathBuf {
+    let path_file = dirs::home_dir()
+        .unwrap()
+        .join(".jotx")
+        .join("path");
+
+    let content = fs::read_to_string(&path_file)
+        .expect("Failed to read ~/.jotx/path");
+
+    PathBuf::from(content.trim())
+}
+
+pub fn run_make(target: &str) {
+    let repo = load_repo_path();
+
+    let status = Command::new("make")
+        .arg(target)
+        .current_dir(&repo)
+        .status()
+        .expect("failed to run make command");
+
+    if !status.success() {
+        eprintln!("❌ make {} failed", target);
+    }
 }

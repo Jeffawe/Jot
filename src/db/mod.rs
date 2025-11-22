@@ -5,8 +5,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
+mod cache;
+use cache::FingerprintCache;
 
-use crate::types::{Entry, EntryType, QueryParams};
+use crate::types::{EntryType};
 
 const ASSOCIATION_DEPTH: i64 = 3;
 const CLEAN_SESSIONS_DAYS: i64 = 90;
@@ -14,22 +16,36 @@ const CLEAN_OLD_ASSOCIATIONS_DAYS: i64 = 30;
 
 pub struct Database {
     pub conn: Connection,
+    pub cache: FingerprintCache,
 }
 
 impl Database {
     pub fn new() -> Result<Self> {
         let db_path = Self::get_db_path();
+        let cache_path = Self::get_cache_path();
 
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).ok();
         }
 
         let conn = Connection::open(db_path)?;
+        let cache;
+
+        match FingerprintCache::new(cache_path) {
+            Ok(c) => cache = c,
+            Err(e) => {
+                println!("Failed to create cache: {}", e);
+                return Err(rusqlite::Error::InvalidQuery);
+            }
+            
+        }
+
+         // Enable WAL mode for better concurrency
 
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
 
-        let db = Database { conn };
+        let db = Database { conn, cache };
         db.init_schema()?;
         Ok(db)
     }
@@ -37,6 +53,11 @@ impl Database {
     fn get_db_path() -> PathBuf {
         let home = std::env::var("HOME").expect("HOME not set");
         PathBuf::from(home).join(".jotx").join("jotx.db")
+    }
+
+    fn get_cache_path() -> PathBuf {
+        let home = std::env::var("HOME").expect("HOME not set");
+        PathBuf::from(home).join(".jotx").join("fingerprint_cache.db")
     }
 
     fn init_schema(&self) -> Result<()> {
@@ -69,6 +90,16 @@ impl Database {
         // Indexes
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entry_type ON entries(entry_type)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entries_host ON entries(host)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entries_times_run ON entries(times_run DESC)",
             [],
         )?;
 
@@ -244,32 +275,82 @@ impl Database {
             blob
         });
 
-        // Check if command already exists with the same host
-        let existing: Option<i64> = self
+        // Check if command exists with same content
+        let existing: Option<(i64, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT id FROM entries 
+                "SELECT id, host FROM entries 
              WHERE entry_type = 'shell' 
-             AND content = ?1 
-             AND (host = ?2 OR (host IS NULL AND ?2 IS NULL))",
-                rusqlite::params![content, host],
-                |row| row.get(0),
+             AND content = ?1
+             ORDER BY timestamp DESC
+             LIMIT 1",
+                [content],
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .ok();
 
-        let entry_id = if let Some(id) = existing {
-            // Same command + same host: increment times_run
-            self.conn.execute(
-                "UPDATE entries 
-             SET times_run = times_run + 1, 
-                 updated_at = strftime('%s', 'now'),
-                 timestamp = ?2
-             WHERE id = ?1",
-                rusqlite::params![id, timestamp as i64],
+        let entry_id = if let Some((id, existing_host)) = existing {
+            // Check if existing host is null/empty
+            let existing_host_empty = existing_host
+                .as_ref()
+                .map(|h| h.trim().is_empty())
+                .unwrap_or(true);
+
+            if existing_host_empty {
+                // Old entry has no host - update with new host info, DON'T increment times_run
+                self.conn.execute(
+                    "UPDATE entries 
+                 SET host = ?2,
+                     working_dir = ?3,
+                     user = ?4,
+                     app_name = ?5,
+                     window_title = ?6,
+                     timestamp = ?7,
+                     updated_at = strftime('%s', 'now')
+                 WHERE id = ?1",
+                    rusqlite::params![
+                        id,
+                        host,
+                        working_dir,
+                        user,
+                        app_name,
+                        window_title,
+                        timestamp as i64
+                    ],
+                )?;
+                id
+            } else if existing_host == host.map(|h| h.to_string()) {
+                // Same command + same host: increment times_run
+                self.conn.execute(
+                    "UPDATE entries 
+                 SET times_run = times_run + 1, 
+                     updated_at = strftime('%s', 'now'),
+                     timestamp = ?2
+                 WHERE id = ?1",
+                    rusqlite::params![id, timestamp as i64],
+                )?;
+                id
+            } else {
+                // Different host: insert as new entry
+                self.conn.execute(
+                "INSERT INTO entries (entry_type, content, timestamp, working_dir, user, host, app_name, window_title, embedding)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                rusqlite::params![
+                    EntryType::Shell.to_string(),
+                    content,
+                    timestamp as i64,
+                    working_dir,
+                    user,
+                    host,
+                    app_name,
+                    window_title,
+                    embedding_blob,
+                ],
             )?;
-            id // Return existing ID
+                self.conn.last_insert_rowid()
+            }
         } else {
-            // Different host or new command: insert new entry
+            // New command: insert
             self.conn.execute(
             "INSERT INTO entries (entry_type, content, timestamp, working_dir, user, host, app_name, window_title, embedding)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -285,77 +366,11 @@ impl Database {
                 embedding_blob,
             ],
         )?;
-            self.conn.last_insert_rowid() // Return new ID
+            self.conn.last_insert_rowid()
         };
 
         self.track_associations_only(entry_id)?;
-
         Ok(())
-    }
-
-    pub fn query_entries(&self, params: QueryParams) -> Result<Vec<Entry>> {
-        let mut sql = String::from("SELECT * FROM entries WHERE 1=1");
-        let mut conditions = Vec::new();
-
-        if let Some(et) = &params.entry_type {
-            sql.push_str(" AND entry_type = ?");
-            conditions.push(et.as_str());
-        }
-
-        if let Some(content) = &params.content_search {
-            sql.push_str(" AND content LIKE ?");
-            conditions.push(content.as_str());
-        }
-
-        if let Some(wd) = &params.working_dir {
-            sql.push_str(" AND working_dir = ?");
-            conditions.push(wd.as_str());
-        }
-
-        if let Some(app) = &params.app_name {
-            sql.push_str(" AND app_name = ?");
-            conditions.push(app.as_str());
-        }
-
-        if let Some(u) = &params.user {
-            sql.push_str(" AND user = ?");
-            conditions.push(u.as_str());
-        }
-
-        if let Some(h) = &params.host {
-            sql.push_str(" AND host = ?");
-            conditions.push(h.as_str());
-        }
-
-        sql.push_str(" ORDER BY timestamp DESC");
-
-        if let Some(limit) = params.limit {
-            sql.push_str(&format!(" LIMIT {}", limit));
-        }
-
-        let mut stmt = self.conn.prepare(&sql)?;
-
-        let entries = stmt
-            .query_map(rusqlite::params_from_iter(conditions.iter()), |row| {
-                Ok(Entry {
-                    id: row.get(0)?,
-                    entry_type: row.get(1)?,
-                    content: row.get(2)?,
-                    timestamp: row.get(3)?,
-                    times_run: row.get(4)?,
-                    working_dir: row.get(5)?,
-                    git_repo: row.get(6)?,
-                    git_branch: row.get(7)?,
-                    user: row.get(8)?,
-                    host: row.get(9)?,
-                    app_name: row.get(10)?,
-                    window_title: row.get(11)?,
-                    embedding: row.get(12)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(entries)
     }
 
     pub fn cleanup_old_entries(&self, clipboard_limit: usize, shell_limit: usize) -> Result<()> {

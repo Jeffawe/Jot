@@ -1,9 +1,14 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+
+use crate::commands::get_plugin_dir;
 use crate::plugin::base_plugin::{ExternalPlugin, Plugin, CommandContext, DaemonContext, LlmContext};
 use crate::types::{SearchResult, PluginAction};
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
+
+use super::script_plugin::ScriptPlugin;
+
 
 pub struct PluginManager {
     plugins: Vec<Box<dyn Plugin>>,
@@ -12,8 +17,7 @@ pub struct PluginManager {
 
 impl PluginManager {
     pub fn new() -> Self {
-        let home = std::env::var("HOME").expect("HOME not set");
-        let plugin_dir = PathBuf::from(home).join(".jotx").join("plugins");
+        let plugin_dir = get_plugin_dir();
         
         fs::create_dir_all(&plugin_dir).ok();
         
@@ -36,6 +40,17 @@ impl PluginManager {
                 
                 // Skip non-executable files
                 if !path.is_file() {
+                    continue;
+                }
+
+                if path.extension().map_or(false, |e| e == "rhai") {
+                    match ScriptPlugin::new(path.clone()) {
+                        Ok(plugin) => {
+                            println!("🔌 Loaded script: {}", Plugin::name(&plugin));
+                            self.plugins.push(Box::new(plugin));
+                        },
+                        Err(e) => eprintln!("❌ Error loading script {:?}: {}", path, e),
+                    }
                     continue;
                 }
                 
