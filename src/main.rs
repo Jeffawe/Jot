@@ -24,7 +24,7 @@ use types::{Cli, Commands};
 
 use ask::ask_handler::{AskResponse, ask};
 use ask::search_handler::search;
-use commands::{get_working_directory, show_settings, run_make};
+use commands::{get_working_directory, run_make, show_settings};
 use config::reload_config;
 use llm::handle_llm;
 
@@ -211,6 +211,13 @@ fn stop_service() {
 pub fn run_service() {
     println!("Running service...\n");
     println!("run_service started, PID: {}", std::process::id());
+
+    println!("Initial data load from terminal histories...");
+    if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
+        if let Err(e) = monitor.read_all_histories() {
+            eprintln!("Shell error: {}", e);
+        }
+    }
 
     // Clipboard thread
     thread::spawn(move || {
