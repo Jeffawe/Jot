@@ -1,14 +1,19 @@
+[workspace]
+members = [".", "src-tauri"]
+default-members = ["."]
+
 [package]
 name = "jotx"
 version = "0.1.0"
 edition = "2024"
 
-[workspace]
-members = [".", "src-tauri"]
-
 [lib]
 name = "jotx"
 path = "src/lib.rs"
+
+[[bin]]
+name = "jotx"
+path = "src/main.rs"
 
 [dependencies]
 copypasta = "0.10"
