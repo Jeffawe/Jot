@@ -24,8 +24,13 @@ impl ClipMon {
         }
     }
 
-    pub fn check(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn check(&mut self, case_sensitive: bool) -> Result<(), Box<dyn std::error::Error>> {
         let clip = self.ctx.get_contents().unwrap_or_default();
+        let clip = if case_sensitive {
+            clip
+        } else {
+            clip.to_lowercase()
+        };
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let current_context = match get_context() {

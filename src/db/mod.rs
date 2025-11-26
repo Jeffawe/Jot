@@ -646,3 +646,8 @@ pub static CLIPBOARD_DB: Lazy<Mutex<Database>> =
 // Shell monitor thread
 pub static SHELL_DB: Lazy<Mutex<Database>> =
     Lazy::new(|| Mutex::new(Database::new().expect("Failed to init shell DB")));
+
+pub fn get_db_path() -> PathBuf {
+    let home = std::env::var("HOME").expect("HOME not set");
+    PathBuf::from(home).join(".jotx").join("jotx.db")
+}

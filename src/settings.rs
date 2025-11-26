@@ -1,12 +1,16 @@
 use once_cell::sync::Lazy;
-use std::sync::Mutex;
 use rusqlite::{Connection, Result};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub capture_clipboard: bool,
     pub capture_shell: bool,
     pub capture_shell_history_with_files: bool,
+    pub shell_case_sensitive: bool,
+    pub clipboard_case_sensitive: bool,
     pub clipboard_limit: usize,
     pub shell_limit: usize,
 }
@@ -17,6 +21,8 @@ impl Settings {
             capture_clipboard: true,
             capture_shell: true,
             capture_shell_history_with_files: false,
+            shell_case_sensitive: false,
+            clipboard_case_sensitive: false,
             clipboard_limit: 10_000,
             shell_limit: 5_000,
         }
@@ -35,7 +41,7 @@ impl Settings {
 
     fn load_from_db() -> Result<Self> {
         let conn = Self::get_connection()?;
-        
+
         // Initialize settings table if it doesn't exist
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
@@ -49,11 +55,10 @@ impl Settings {
 
         // Helper to get a setting
         let get_setting = |key: &str| -> Option<String> {
-            conn.query_row(
-                "SELECT value FROM settings WHERE key = ?1",
-                [key],
-                |row| row.get(0)
-            ).ok()
+            conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+                row.get(0)
+            })
+            .ok()
         };
 
         // Load each setting
@@ -65,6 +70,12 @@ impl Settings {
         }
         if let Some(val) = get_setting("capture_shell_history_with_files") {
             settings.capture_shell_history_with_files = val.parse().unwrap_or(false);
+        }
+        if let Some(val) = get_setting("shell_case_sensitive") {
+            settings.shell_case_sensitive = val.parse().unwrap_or(false);
+        }
+        if let Some(val) = get_setting("clipboard_case_sensitive") {
+            settings.clipboard_case_sensitive = val.parse().unwrap_or(false);
         }
         if let Some(val) = get_setting("clipboard_limit") {
             settings.clipboard_limit = val.parse().unwrap_or(10_000);
@@ -90,7 +101,24 @@ impl Settings {
         )?;
         conn.execute(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
-            ["capture_shell_history_with_files", &self.capture_shell_history_with_files.to_string()],
+            [
+                "capture_shell_history_with_files",
+                &self.capture_shell_history_with_files.to_string(),
+            ],
+        )?;
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            [
+                "shell_case_sensitive",
+                &self.shell_case_sensitive.to_string(),
+            ],
+        )?;
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            [
+                "clipboard_case_sensitive",
+                &self.clipboard_case_sensitive.to_string(),
+            ],
         )?;
         conn.execute(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
@@ -135,6 +163,16 @@ impl Settings {
         self.save().ok();
     }
 
+    pub fn toggle_shell_case_sensitive(&mut self) {
+        self.shell_case_sensitive = !self.shell_case_sensitive;
+        self.save().ok();
+    }
+
+    pub fn toggle_clipboard_case_sensitive(&mut self) {
+        self.clipboard_case_sensitive = !self.clipboard_case_sensitive;
+        self.save().ok();
+    }
+
     pub fn set_clipboard_limit(&mut self, limit: usize) {
         self.clipboard_limit = limit;
         self.save().ok();
@@ -147,6 +185,4 @@ impl Settings {
 }
 
 // Load settings from DB on first access
-pub static GLOBAL_SETTINGS: Lazy<Mutex<Settings>> = Lazy::new(|| {
-    Mutex::new(Settings::load())
-});
+pub static GLOBAL_SETTINGS: Lazy<Mutex<Settings>> = Lazy::new(|| Mutex::new(Settings::load()));

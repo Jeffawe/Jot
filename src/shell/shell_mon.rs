@@ -15,19 +15,21 @@ impl ShellMon {
         Self {}
     }
 
-    pub fn read_files(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        match self.read_all_histories() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e),
-        }
-    }
-
-    pub fn read_all_histories(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn read_all_histories(
+        &mut self,
+        case_sensitive: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         // Process bash history
         if let Ok(bash_commands) = self.read_bash_history() {
             for cmd in bash_commands {
+                let cmd = if case_sensitive {
+                    cmd
+                } else {
+                    cmd.to_lowercase()
+                };
+
                 if let Err(e) = self.add_or_increment(cmd, timestamp) {
                     eprintln!("Error adding bash command: {}", e);
                 }
@@ -37,6 +39,12 @@ impl ShellMon {
         // Process zsh history
         if let Ok(zsh_commands) = self.read_zsh_history() {
             for cmd in zsh_commands {
+                let cmd = if case_sensitive {
+                    cmd
+                } else {
+                    cmd.to_lowercase()
+                };
+                
                 if let Err(e) = self.add_or_increment(cmd, timestamp) {
                     eprintln!("Error adding zsh command: {}", e);
                 }

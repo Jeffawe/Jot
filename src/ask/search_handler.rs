@@ -160,7 +160,8 @@ pub fn keyword_search(
     // Calculate detailed relevance scores for top 50 results only
     for result in &mut results {
         let working_dir = result.working_dir.as_deref().unwrap_or("");
-        let base_score = calculate_relevance_score(&result.content, &query_lower, working_dir, directory);
+        let base_score =
+            calculate_relevance_score(&result.content, &query_lower, working_dir, directory);
 
         // Add frequency bonus (times_run)
         let frequency_bonus = (result.times_run as f32).min(10.0) * 2.0; // Max +20 points
@@ -351,93 +352,108 @@ pub fn keyword_search_with_params(
     }
 
     // Time range filter
-    if let Some(ref time_range) = params.time_range {
-        let (start_ts, end_ts) = match time_range {
-            SimpleTimeRange::Today => {
-                let now = Local::now();
-                let start = now
-                    .date_naive()
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_local_timezone(Local)
-                    .unwrap();
-                (start.timestamp(), now.timestamp())
-            }
-            SimpleTimeRange::Yesterday => {
-                let now = Local::now();
-                let today_start = now
-                    .date_naive()
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_local_timezone(Local)
-                    .unwrap();
-                let yesterday_start = today_start - Duration::days(1);
-                // End is today_start (exclusive)
-                (yesterday_start.timestamp(), today_start.timestamp())
-            }
-            SimpleTimeRange::LastWeek => {
-                let now = Local::now();
-                (now.timestamp() - (7 * 24 * 60 * 60), now.timestamp())
-            }
-            SimpleTimeRange::LastMonth => {
-                let now = Local::now();
-                (now.timestamp() - (30 * 24 * 60 * 60), now.timestamp())
-            }
-            SimpleTimeRange::Custom => {
-                let start = *params.custom_start.as_ref().unwrap_or(&0);
-                // Default end to NOW if not provided
-                let end = *params
-                    .custom_end
-                    .as_ref()
-                    .unwrap_or(&Local::now().timestamp());
-                (start, end)
-            }
+    let (time_boost_start, time_boost_end, time_penalty) =
+        if let Some(ref time_range) = params.time_range {
+            let (start_ts, end_ts) = match time_range {
+                SimpleTimeRange::Today => {
+                    let now = Local::now();
+                    let start = now
+                        .date_naive()
+                        .and_hms_opt(0, 0, 0)
+                        .unwrap()
+                        .and_local_timezone(Local)
+                        .unwrap();
+                    (start.timestamp(), now.timestamp())
+                }
+                SimpleTimeRange::Yesterday => {
+                    let now = Local::now();
+                    let today_start = now
+                        .date_naive()
+                        .and_hms_opt(0, 0, 0)
+                        .unwrap()
+                        .and_local_timezone(Local)
+                        .unwrap();
+                    let yesterday_start = today_start - Duration::days(1);
+                    (yesterday_start.timestamp(), today_start.timestamp())
+                }
+                SimpleTimeRange::LastWeek => {
+                    let now = Local::now();
+                    (now.timestamp() - (7 * 24 * 60 * 60), now.timestamp())
+                }
+                SimpleTimeRange::LastMonth => {
+                    let now = Local::now();
+                    (now.timestamp() - (30 * 24 * 60 * 60), now.timestamp())
+                }
+                SimpleTimeRange::Custom => {
+                    let start = *params.custom_start.as_ref().unwrap_or(&0);
+                    let end = *params
+                        .custom_end
+                        .as_ref()
+                        .unwrap_or(&Local::now().timestamp());
+                    (start, end)
+                }
+            };
+            (Some(start_ts), Some(end_ts), true)
+        } else {
+            (None, None, false)
         };
-
-        // Apply Start Time
-        where_clauses.push(format!("e.timestamp >= ?{}", param_index));
-        bind_params.push(Box::new(start_ts));
-        param_index += 1;
-
-        // Apply End Time (Crucial for "Yesterday" or "Custom")
-        // We generally apply this for all queries to be safe, or you can optimize
-        if matches!(
-            time_range,
-            SimpleTimeRange::Yesterday | SimpleTimeRange::Custom
-        ) {
-            where_clauses.push(format!("e.timestamp < ?{}", param_index)); // Note: < for end time (exclusive)
-            bind_params.push(Box::new(end_ts));
-            param_index += 1;
-        }
-    }
 
     // Build final SQL query
     let where_clause = where_clauses.join(" AND ");
-    println!("WHERE CLAUSE: {}", where_clause);
-    println!("BIND PARAMS LEN: {}", bind_params.len());
-    println!("Param Index: {}", param_index);
 
-    let sql = format!(
+    let sql = if time_penalty {
+        format!(
         "SELECT e.id, e.entry_type, e.content, e.timestamp, e.times_run, 
-            e.working_dir, e.host, e.app_name, e.window_title,
-            CASE 
-                WHEN e.working_dir = ?{} THEN 15.0
-                WHEN e.working_dir LIKE ?{} || '%' OR ?{} LIKE e.working_dir || '%' THEN 8.0
-                ELSE 0.0
-            END as pwd_boost
-    FROM entries_fts 
-    JOIN entries e ON entries_fts.rowid = e.id
-    WHERE {}
-    ORDER BY pwd_boost DESC, e.times_run DESC, e.timestamp DESC
-    LIMIT 50",
-        param_index,
-        param_index + 1,
-        param_index + 2,
+                e.working_dir, e.host, e.app_name, e.window_title,
+                CASE 
+                    WHEN e.working_dir = ?{} THEN 15.0
+                    WHEN e.working_dir LIKE ?{} || '%' OR ?{} LIKE e.working_dir || '%' THEN 8.0
+                    ELSE 0.0
+                END +
+                CASE
+                    WHEN e.timestamp >= ?{} AND e.timestamp < ?{} THEN 50.0
+                    WHEN e.timestamp >= ?{} - (24*60*60) AND e.timestamp < ?{} + (24*60*60) THEN 25.0
+                    ELSE 0.0
+                END as combined_boost
+        FROM entries_fts 
+        JOIN entries e ON entries_fts.rowid = e.id
+        WHERE {}
+        ORDER BY combined_boost DESC, e.times_run DESC, e.timestamp DESC
+        LIMIT 50",
+        param_index, param_index+1, param_index+2,
+        param_index+3, param_index+4,
+        param_index+3, param_index+4,
         where_clause
-    );
+    )
+    } else {
+        format!(
+            "SELECT e.id, e.entry_type, e.content, e.timestamp, e.times_run, 
+                e.working_dir, e.host, e.app_name, e.window_title,
+                CASE 
+                    WHEN e.working_dir = ?{} THEN 15.0
+                    WHEN e.working_dir LIKE ?{} || '%' OR ?{} LIKE e.working_dir || '%' THEN 8.0
+                    ELSE 0.0
+                END as combined_boost
+        FROM entries_fts 
+        JOIN entries e ON entries_fts.rowid = e.id
+        WHERE {}
+        ORDER BY combined_boost DESC, e.times_run DESC, e.timestamp DESC
+        LIMIT 50",
+            param_index,
+            param_index + 1,
+            param_index + 2,
+            where_clause
+        )
+    };
 
+    // Add bind parameters
     for _ in 0..3 {
         bind_params.push(Box::new(directory.to_string()));
+    }
+
+    if time_penalty {
+        bind_params.push(Box::new(time_boost_start.unwrap()));
+        bind_params.push(Box::new(time_boost_end.unwrap()));
     }
 
     // Prepare statement
@@ -468,7 +484,8 @@ pub fn keyword_search_with_params(
 
     for result in &mut results {
         let working_dir = result.working_dir.as_deref().unwrap_or("");
-        let base_score = calculate_relevance_score(&result.content, &query_str, working_dir, directory);
+        let base_score =
+            calculate_relevance_score(&result.content, &query_str, working_dir, directory);
         let frequency_bonus = (result.times_run as f32).min(10.0) * 2.0;
         result.similarity = base_score + frequency_bonus;
     }

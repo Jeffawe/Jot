@@ -2812,6 +2812,7 @@ dependencies = [
  "fastembed",
  "once_cell",
  "pid",
+ "regex",
  "reqwest",
  "rhai",
  "rusqlite",

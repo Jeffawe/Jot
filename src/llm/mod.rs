@@ -1,11 +1,14 @@
-use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 mod default;
-mod manager;
 mod handle_llm;
+mod manager;
 
+pub use handle_llm::{
+    download_model_with_string, handle_llm, install_ollama, remove_model_with_string,
+    start_ollama_service,
+};
 pub use manager::GLOBAL_LLM;
-pub use handle_llm::handle_llm;
 
 /// Query parameters that the LLM extracts from natural language
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,7 +50,7 @@ pub struct QueryFilters {
 pub trait LlmModel: Send + Sync {
     /// Initialize the model (load weights, etc.)
     async fn initialize(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    
+
     /// Interpret a natural language query into structured search params
     async fn interpret_query(
         &self,
@@ -56,7 +59,7 @@ pub trait LlmModel: Send + Sync {
         max_tokens: u32,
         temperature: f32,
     ) -> Result<LLMQueryParams, Box<dyn std::error::Error>>;
-    
+
     /// Answer a knowledge question directly
     async fn answer_question(
         &self,
@@ -64,7 +67,7 @@ pub trait LlmModel: Send + Sync {
         max_tokens: u32,
         temperature: f32,
     ) -> Result<String, Box<dyn std::error::Error>>;
-    
+
     /// Get model identifier
     fn model_name(&self) -> &str;
 }

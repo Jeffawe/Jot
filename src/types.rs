@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, Args};
+use clap::{Args, Parser, Subcommand};
 use rusqlite::Result;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
@@ -67,7 +67,7 @@ pub struct PluginArgs {
     /// Checks the functions exported by the specified plugin, or all plugins (e.g., --check my_plugin or --check all).
     #[arg(long, value_name = "PLUGIN_NAME")]
     pub check: Option<String>,
-    
+
     /// The name of the plugin script to create or act upon (positional argument).
     #[arg(value_name = "PLUGIN_NAME")]
     pub name: Option<String>,
@@ -101,6 +101,8 @@ pub enum Commands {
     HandleLlm,
     /// Show settings
     Settings,
+    /// Update Exclude Privacy Settings
+    Privacy,
     /// Cleanup database and optimize
     Cleanup,
     /// Clean All Data
@@ -113,7 +115,7 @@ pub enum Commands {
     #[command(hide = true)] // Hide from help menu
     InternalDaemon,
 
-    #[command(hide = true)] 
+    #[command(hide = true)]
     Capture {
         #[arg(long)]
         cmd: String,
@@ -127,6 +129,18 @@ pub enum Commands {
         #[arg(long)]
         host: Option<String>,
     },
+
+    /// Setup jotx
+    #[command(hide = true)]
+    FullSetup,
+
+    /// Setup hooks for jotx
+    #[command(hide = true)]
+    SetupHooks,
+
+    /// Install LLM
+    #[command(hide = true)]
+    InstallLLM,
 }
 
 #[derive(Default)]
@@ -242,6 +256,19 @@ pub struct GUISearchResult {
     pub score: f32,
     pub source: String,
     pub timestamp: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OllamaStatus {
+    pub installed: bool,
+    pub running: bool,
+    pub models: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathInfo {
+  pub label: String,
+  pub path: String
 }
 
 // ============================================================================

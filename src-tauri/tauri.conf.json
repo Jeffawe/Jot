@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.tauri.dev",
   "build": {
-    "frontendDist": "jotx_gui",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "frontendDist": "jotx-gui/dist",
+    "beforeDevCommand": "npm run dev --prefix",
+    "beforeBuildCommand": "npm run build --prefix"
   },
   "app": {
     "windows": [

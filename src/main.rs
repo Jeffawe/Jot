@@ -7,23 +7,23 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use jotx::types::{Cli, Commands};
 
-use jotx::ask::{search, AskResponse, ask};
-use jotx::commands::{get_working_directory, run_make, show_settings, get_plugin_dir};
-use jotx::config::reload_config;
-use jotx::llm::handle_llm;
-
+use jotx::ask::{AskResponse, ask, search};
 use jotx::clipboard::clip_mon::GLOBAL_CLIP_MON;
+use jotx::commands::{get_plugin_dir, get_working_directory, show_privacy_settings, show_settings};
 use jotx::config::GLOBAL_CONFIG;
+use jotx::config::reload_config;
 use jotx::db::USER_DB;
+use jotx::llm::handle_llm;
 use jotx::plugin::{
     CommandContext, DaemonContext, GLOBAL_PLUGIN_MANAGER, SensitiveCommandFilter,
     check_plugin_functions, create_new_plugin_script,
 };
 use jotx::settings::GLOBAL_SETTINGS;
+use jotx::setup::{clean_data, full_setup, install_llm, setup_hooks, uninstall};
 use jotx::shell::shell_mon::GLOBAL_SHELL_MON;
 
 use jotx::managers::shutdown_manager::{on_shutdown, shutdown};
-use jotx::pid_controller::{is_running, remove_pid, save_pid, PID_FILE};
+use jotx::pid_controller::{PID_FILE, is_running, remove_pid, save_pid};
 
 const CLIP_SLEEP_DURATION_SECS: u64 = 1;
 const SHELL_SLEEP_DURATION_SECS: u64 = 3600;
@@ -45,7 +45,7 @@ async fn main() {
         Commands::Ask { query, print_only } => {
             let pwd = get_working_directory();
 
-            let ask_result = ask(&query, &pwd, print_only).await;
+            let ask_result = ask(&query, &pwd, print_only, false).await;
             match ask_result {
                 Ok(value) => {
                     if let Some(result) = ask_to_string(value) {
@@ -118,6 +118,11 @@ async fn main() {
         }
         Commands::Reload => reload(),
         Commands::Settings => show_settings(),
+        Commands::Privacy => {
+            if let Err(e) = show_privacy_settings() {
+                eprintln!("Error updating privacy settings: {}", e);
+            }
+        }
         Commands::Exit => stop_service(),
         Commands::InternalDaemon => {
             save_pid();
@@ -131,8 +136,31 @@ async fn main() {
         } => {
             capture_command(&cmd, pwd, user, host);
         }
-        Commands::CleanData => run_make("clean-data"),
-        Commands::Uninstall => run_make("uninstall"),
+        Commands::CleanData => {
+            if let Err(e) = clean_data(false) {
+                eprintln!("Error cleaning data: {}", e);
+            }
+        }
+        Commands::Uninstall => {
+            if let Err(e) = uninstall(false) {
+                eprintln!("Error uninstalling: {}", e);
+            }
+        }
+        Commands::InstallLLM => {
+            if let Err(e) = install_llm() {
+                eprintln!("Error installing llm: {}", e);
+            }
+        }
+        Commands::FullSetup => {
+            if let Err(e) = full_setup() {
+                eprintln!("Error setting up: {}", e);
+            }
+        }
+        Commands::SetupHooks => {
+            if let Err(e) = setup_hooks() {
+                eprintln!("Error setting up hooks: {}", e);
+            }
+        }
     }
 }
 
@@ -203,8 +231,16 @@ pub fn run_service() {
     println!("run_service started, PID: {}", std::process::id());
 
     println!("Initial data load from terminal histories...");
+    let shell_case_sensitive = {
+        if let Ok(settings) = GLOBAL_SETTINGS.lock() {
+            settings.shell_case_sensitive
+        } else {
+            false
+        }
+    };
+
     if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
-        if let Err(e) = monitor.read_all_histories() {
+        if let Err(e) = monitor.read_all_histories(shell_case_sensitive) {
             eprintln!("Shell error: {}", e);
         }
     }
@@ -212,13 +248,22 @@ pub fn run_service() {
     // Clipboard thread
     thread::spawn(move || {
         while is_running() {
-            if let Ok(settings) = GLOBAL_SETTINGS.lock() {
-                if settings.capture_clipboard {
-                    // Lock the mutex to get mutable access
-                    if let Ok(mut monitor) = GLOBAL_CLIP_MON.lock() {
-                        if let Err(e) = monitor.check() {
-                            eprintln!("Clipboard error: {}", e);
-                        }
+            let (should_capture, clipboard_case_sensitive) = {
+                if let Ok(settings) = GLOBAL_SETTINGS.lock() {
+                    (
+                        settings.capture_clipboard,
+                        settings.clipboard_case_sensitive,
+                    )
+                } else {
+                    (false, false)
+                }
+            };
+
+            if should_capture {
+                // Lock the mutex to get mutable access
+                if let Ok(mut monitor) = GLOBAL_CLIP_MON.lock() {
+                    if let Err(e) = monitor.check(clipboard_case_sensitive) {
+                        eprintln!("Clipboard error: {}", e);
                     }
                 }
             }
@@ -229,16 +274,27 @@ pub fn run_service() {
     // Shell thread
     thread::spawn(move || {
         while is_running() {
-            if let Ok(settings) = GLOBAL_SETTINGS.lock() {
-                if settings.capture_shell && settings.capture_shell_history_with_files {
-                    // Lock the mutex to get mutable access
-                    if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
-                        if let Err(e) = monitor.read_files() {
-                            eprintln!("Shell error: {}", e);
-                        }
+            let (should_capture, should_capture_files, shell_case_sensitive) = {
+                if let Ok(settings) = GLOBAL_SETTINGS.lock() {
+                    (
+                        settings.capture_shell,
+                        settings.capture_shell_history_with_files,
+                        settings.shell_case_sensitive,
+                    )
+                } else {
+                    (false, false, false)
+                }
+            };
+
+            if should_capture && should_capture_files {
+                // Lock the mutex to get mutable access
+                if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
+                    if let Err(e) = monitor.read_all_histories(shell_case_sensitive) {
+                        eprintln!("Shell error: {}", e);
                     }
                 }
             }
+
             thread::sleep(Duration::from_secs(SHELL_SLEEP_DURATION_SECS));
         }
     });
@@ -301,12 +357,12 @@ fn capture_command(cmd: &str, pwd: Option<String>, user: Option<String>, host: O
         return;
     }
 
-    let should_capture = {
-        GLOBAL_SETTINGS
-            .lock()
-            .ok()
-            .map(|s| s.capture_shell)
-            .unwrap_or(false)
+    let (should_capture, shell_case_sensitive) = {
+        if let Ok(settings) = GLOBAL_SETTINGS.lock() {
+            (settings.capture_shell, settings.shell_case_sensitive)
+        } else {
+            (false, false)
+        }
     };
 
     if !should_capture {
@@ -331,7 +387,12 @@ fn capture_command(cmd: &str, pwd: Option<String>, user: Option<String>, host: O
 
     if should_add {
         if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
-            monitor.add_command(cmd.to_string(), timestamp, pwd, user, host);
+            let cmd = if shell_case_sensitive {
+                cmd.to_string()
+            } else {
+                cmd.to_lowercase()
+            };
+            monitor.add_command(cmd, timestamp, pwd, user, host);
         }
     }
 }
@@ -374,5 +435,22 @@ fn ask_to_string(resp: AskResponse) -> Option<String> {
     match resp {
         AskResponse::Knowledge(s) => Some(s),
         AskResponse::SearchResults(opt) => opt,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_capture_command() {
+        initialize_plugins();
+
+        capture_command(
+            "ls -la",
+            Some("/home/user".to_string()),
+            Some("user".to_string()),
+            Some("host".to_string()),
+        );
     }
 }

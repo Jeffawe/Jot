@@ -22,6 +22,7 @@ pub async fn ask(
     query: &str,
     directory: &str,
     print_only: bool,
+    test: bool,
 ) -> Result<AskResponse, Box<dyn std::error::Error>> {
     if query.trim().is_empty() {
         return Err("Query cannot be empty".into());
@@ -89,7 +90,9 @@ pub async fn ask(
             // Tier 3: LLM fallback
             let params = llm_daemon.interpret_query(query, directory).await?;
 
-            println!("LLM interpreted query params: {:?}", params);
+            if test {
+                println!("LLM Query Params: {:?}", params);
+            }
 
             {
                 let mut db = match USER_DB.lock() {
@@ -272,9 +275,10 @@ mod tests {
         println!("Current timestamp: {}", now);
         println!("Current date: {}", Local::now());
         let result = ask(
-            "make used today",
+            "source used",
             "/Users/somua/Documents/Projects/ClipboardAI/jot-cli",
             false,
+            true
         )
         .await
         .unwrap();

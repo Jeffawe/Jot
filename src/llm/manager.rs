@@ -83,6 +83,35 @@ impl LlmManager {
             })
             .unwrap_or(false)
     }
+
+pub fn get_models(&self) -> Vec<String> {
+    Command::new("ollama")
+        .args(&["list"])
+        .output()
+        .map(|output| {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout
+                .lines()
+                .skip(1)  // Skip the "NAME ID SIZE MODIFIED" header
+                .filter_map(|line| {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 3 {
+                        // parts[0] = name, parts[1] = id, parts[2] = size (e.g., "986"), parts[3] = unit (e.g., "MB")
+                        let name = parts[0];
+                        let size = if parts.len() >= 4 {
+                            format!("{} {}", parts[2], parts[3])  // "986 MB"
+                        } else {
+                            parts[2].to_string()  // Just the number if no unit
+                        };
+                        Some(format!("{} ({})", name, size))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or(Vec::new())
+}
     
     /// Get or initialize the LLM model
     pub async fn get_llm(&mut self) -> Result<Arc<Box<dyn LlmModel>>, LlmError> {

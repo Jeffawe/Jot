@@ -78,7 +78,7 @@ pub async fn handle_llm() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn install_ollama() -> Result<(), Box<dyn std::error::Error>> {
+pub fn install_ollama() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n{}", "Running installation script...".cyan());
     
     let script_path = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/install-ollama.sh");
@@ -166,7 +166,7 @@ fn remove_model() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn start_ollama_service() -> Result<(), Box<dyn std::error::Error>> {
+pub fn start_ollama_service() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n{}", "Starting Ollama service...".cyan());
     
     Command::new("ollama")
@@ -176,6 +176,36 @@ fn start_ollama_service() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::sleep(std::time::Duration::from_secs(2));
     
     println!("{}", "✓ Ollama service started".green());
+    
+    Ok(())
+}
+
+pub fn remove_model_with_string(model: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let status = Command::new("ollama")
+        .arg("rm")
+        .arg(model)
+        .status()?;
+    
+    if status.success() {
+        println!("\n{} Model removed!", "✓".green());
+    } else {
+        println!("\n{} Removal failed", "✗".red());
+    }
+    
+    Ok(())
+}
+
+pub fn download_model_with_string(model: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let status = Command::new("ollama")
+        .arg("pull")
+        .arg(model)
+        .status()?;
+    
+    if status.success() {
+        println!("\n{} Model downloaded!", "✓".green());
+    } else {
+        println!("\n{} Download failed", "✗".red());
+    }
     
     Ok(())
 }
