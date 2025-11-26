@@ -91,18 +91,13 @@ jobs:
             ## Installation
 
             ### Quick Install (Recommended)
-```bash
             curl -fsSL https://raw.githubusercontent.com/Jeffawe/Jot/main/install.sh | bash
-```
 
             ### Manual Installation
             1. Download the binary for your platform below
             2. Rename it to `jotx` and make it executable: `chmod +x jotx`
             3. Move it to a directory in your PATH: `mv jotx ~/.local/bin/`
             4. Run setup: `jotx setup`
-
-            ## What's New
-            See commits for details.
           draft: false
           prerelease: false
         env:
