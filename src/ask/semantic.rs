@@ -1,5 +1,7 @@
+use std::collections::HashSet;
+
 use crate::config::GLOBAL_CONFIG;
-use crate::db::GLOBAL_DB;
+use crate::db::USER_DB;
 use crate::embeds::{cosine_similarity, generate_embedding};
 use crate::types::SearchResult;
 
@@ -10,11 +12,11 @@ pub fn semantic_search(query: &str) -> Result<Vec<SearchResult>, Box<dyn std::er
 
     let mut similarity_threshold = 0.5;
 
-    if let Ok(config) = GLOBAL_CONFIG.lock() {
+    if let Ok(config) = GLOBAL_CONFIG.read() {
         similarity_threshold = config.search.similarity_threshold;
     }
 
-    let db = GLOBAL_DB
+    let db = USER_DB
         .lock()
         .map_err(|e| format!("DB lock error: {}", e))?;
 
@@ -61,6 +63,9 @@ pub fn semantic_search(query: &str) -> Result<Vec<SearchResult>, Box<dyn std::er
 
     // Sort by similarity (highest first)
     results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+
+    let mut seen = HashSet::new();
+    results.retain(|item| seen.insert(item.content.clone()));
 
     // Only return results with similarity > 0.5 (threshold)
     let filtered: Vec<SearchResult> = results

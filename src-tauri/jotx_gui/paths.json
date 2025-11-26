@@ -1,0 +1,14 @@
+[
+    {
+        "label": "Project Directory",
+        "path": "/path/to/your/project"
+    },
+    {
+        "label": "Documents",
+        "path": "/path/to/documents"
+    },
+    {
+        "label": "Config Files",
+        "path": "/path/to/config"
+    }
+]

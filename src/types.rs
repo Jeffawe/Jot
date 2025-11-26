@@ -234,6 +234,16 @@ pub struct SearchResult {
     pub similarity: f32,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GUISearchResult {
+    pub title: String,
+    pub content: String,
+    pub score: f32,
+    pub source: String,
+    pub timestamp: i64,
+}
+
 // ============================================================================
 // PLUGIN ACTIONS - What plugins can do
 // ============================================================================

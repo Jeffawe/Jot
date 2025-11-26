@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::GLOBAL_DB;
+use crate::db::CLIPBOARD_DB;
 
 use crate::context::get_context;
 use crate::types::{ClipboardEntry, SimplifiedWindowInfo};
@@ -71,7 +71,7 @@ impl ClipMon {
     }
 
     pub fn add_to_db(&self, entry: &ClipboardEntry) -> Result<(), Box<dyn std::error::Error>> {
-        let db = GLOBAL_DB
+        let db = CLIPBOARD_DB
             .lock()
             .map_err(|e| format!("DB lock error: {}", e))?;
 

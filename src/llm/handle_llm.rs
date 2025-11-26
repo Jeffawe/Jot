@@ -54,8 +54,7 @@ pub async fn handle_llm() -> Result<(), Box<dyn std::error::Error>> {
     println!("  2) List available models");
     println!("  3) Download a model");
     println!("  4) Remove a model");
-    println!("  5) Change default model");
-    println!("  6) Start Ollama service");
+    println!("  5) Start Ollama service");
     println!("  0) Exit");
     println!();
     
@@ -71,8 +70,7 @@ pub async fn handle_llm() -> Result<(), Box<dyn std::error::Error>> {
         "2" => list_available_models()?,
         "3" => download_model()?,
         "4" => remove_model()?,
-        "5" => change_default_model()?,
-        "6" => start_ollama_service()?,
+        "5" => start_ollama_service()?,
         "0" => println!("Goodbye!"),
         _ => println!("Invalid option"),
     }
@@ -100,17 +98,25 @@ fn install_ollama() -> Result<(), Box<dyn std::error::Error>> {
 
 fn list_available_models() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n{}", "Popular Small Models (Fast & Efficient):".yellow());
-    println!("  • qwen2:0.5b        ~300MB  (Fastest, recommended)");
-    println!("  • tinyllama         ~600MB  (Good balance)");
-    println!("  • llama3.2:1b       ~1GB    (Better quality)");
-    println!("  • llama3.2:3b       ~2GB    (High quality)");
-    println!("\nTo download a model, select option 3");
-    
+    println!("  • smollm:135m       ~80MB   (Tiny, ultra-fast)");
+    println!("  • smollm:360m       ~200MB  (Very small)");
+    println!("  • qwen2:0.5b        ~350MB  (Fast, good for structured output)");
+    println!("  • tinyllama:1.1b    ~600MB  (Balanced speed/quality)");
+    println!("  • smollm:1.7b       ~1GB    (SmolLM largest)");
+    println!("  • qwen2.5:1.5b      ~900MB  (Better reasoning)");
+    println!("  • llama3.2:1b       ~1.3GB  (Meta's 1B model)");
+    println!("  • phi3:3.8b         ~2.3GB  (Microsoft, punches above weight)");
+    println!("  • qwen2.5:3b        ~2GB    (Recommended for NLP tasks)");
+    println!("  • llama3.2:3b       ~2GB    (Meta's 3B model)");
+    println!("\n{}", "Recommended to use:".green());
+    println!("  → qwen2.5:1.5b or qwen2.5:3b for best balance of speed and capability.");
+    println!("To download, select option 3 from the menu and enter the model name (e.g., qwen2.5:3b).");
+    println!("You can also visit {} for more models.", "https://ollama.com/models".cyan());
     Ok(())
 }
 
 fn download_model() -> Result<(), Box<dyn std::error::Error>> {
-    print!("\nEnter model name (e.g., qwen2:0.5b): ");
+    print!("\nEnter model name (e.g., qwen2:0.5b). Enter 0 to go back and 2 to list available models: ");
     use std::io::{self, Write};
     io::stdout().flush()?;
     
@@ -156,14 +162,6 @@ fn remove_model() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("\n{} Removal failed", "✗".red());
     }
-    
-    Ok(())
-}
-
-fn change_default_model() -> Result<(), Box<dyn std::error::Error>> {
-    println!("\n{}", "This would update your config file".yellow());
-    println!("TODO: Implement config file editing");
-    // TODO: Load config, change model field, save config
     
     Ok(())
 }

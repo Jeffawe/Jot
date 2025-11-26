@@ -78,8 +78,7 @@ fi
 
 echo ""
 
-# Download default model (qwen2:0.5b - smallest viable model)
-DEFAULT_MODEL="qwen2:0.5b"
+DEFAULT_MODEL="qwen2.5:1.5b"
 
 echo -e "${YELLOW}→ Checking for model: ${DEFAULT_MODEL}${NC}"
 

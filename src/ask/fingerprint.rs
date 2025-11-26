@@ -7,8 +7,7 @@ pub struct QueryFingerprint {
     pub temporal: Option<Temporal>,
     pub action_verbs: Vec<String>,
     pub modifiers: Vec<String>,
-    pub entity_type: Option<String>,
-    pub negations: bool,
+    pub negations: bool
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -28,7 +27,6 @@ impl QueryFingerprint {
             temporal: extract_temporal(&query_lower),
             action_verbs: extract_action_verbs(&query_lower),
             modifiers: extract_modifiers(&query_lower),
-            entity_type: infer_entity_type(&query_lower),
             negations: query_lower.contains("not") || query_lower.contains("without"),
         }
     }
@@ -48,11 +46,6 @@ impl QueryFingerprint {
         // Temporal match (30%)
         if self.temporal == other.temporal {
             score += 0.3;
-        }
-        
-        // Entity type match (15%)
-        if self.entity_type == other.entity_type && self.entity_type.is_some() {
-            score += 0.15;
         }
         
         // Negation match (5%)
@@ -107,18 +100,6 @@ fn extract_modifiers(query: &str) -> Vec<String> {
         .filter(|m| query.contains(*m))
         .map(|s| s.to_string())
         .collect()
-}
-
-fn infer_entity_type(query: &str) -> Option<String> {
-    if query.contains("command") || query.contains("cmd") {
-        Some("command".to_string())
-    } else if query.contains("file") {
-        Some("file".to_string())
-    } else if query.contains("branch") {
-        Some("git".to_string())
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]

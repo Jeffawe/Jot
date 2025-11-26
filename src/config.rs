@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use once_cell::sync::Lazy;
-use std::sync::{Mutex};
+use std::sync::RwLock;
 
 // The main config struct - mirrors your TOML file structure
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -42,9 +42,9 @@ impl Default for Config {
                 provider: "ollama".to_string(),
                 api_key: None,
                 api_base: Some("http://localhost:11434".to_string()),
-                model: "llama2".to_string(),
+                model: "qwen2.5:1.5b".to_string(),
                 max_tokens: 500,
-                temperature: 0.7,
+                temperature: 0.3,
                 max_history_results: 10,
             },
             search: SearchConfig {
@@ -109,20 +109,19 @@ impl Config {
 }
 
 // Global config singleton
-pub static GLOBAL_CONFIG: Lazy<Mutex<Config>> = Lazy::new(|| {
+pub static GLOBAL_CONFIG: Lazy<RwLock<Config>> = Lazy::new(|| {
     let config = Config::load().unwrap_or_else(|e| {
         eprintln!("⚠️  Failed to load config: {}, using defaults", e);
         Config::default()
     });
-    Mutex::new(config)
+    RwLock::new(config)
 });
-
 // pub fn get_config() -> MutexGuard<'static, Config> {
 //     GLOBAL_CONFIG.lock().unwrap()
 // }
 
 pub fn reload_config() -> Result<(), Box<dyn std::error::Error>> {
-    GLOBAL_CONFIG.lock().unwrap().reload()
+    GLOBAL_CONFIG.write().unwrap().reload()
 }
 
 #[cfg(test)]

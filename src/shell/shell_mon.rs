@@ -4,9 +4,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::GLOBAL_DB;
+use crate::db::SHELL_DB;
 use crate::embeds::generate_embedding;
-use crate::settings::GLOBAL_SETTINGS;
 use crate::types::ShellEntry;
 
 pub struct ShellMon {}
@@ -17,17 +16,9 @@ impl ShellMon {
     }
 
     pub fn read_files(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Ok(settings) = GLOBAL_SETTINGS.lock() {
-            if settings.capture_shell_history_with_files {
-                match self.read_all_histories() {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(e),
-                }
-            } else {
-                Ok(())
-            }
-        } else {
-            Ok(())
+        match self.read_all_histories() {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
         }
     }
 
@@ -69,7 +60,7 @@ impl ShellMon {
         cmd: String,
         timestamp: u64,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let db = GLOBAL_DB
+        let db = SHELL_DB
             .lock()
             .map_err(|e| format!("DB lock error: {}", e))?;
 
@@ -122,7 +113,7 @@ impl ShellMon {
     }
 
     pub fn add_to_db(&self, entry: &ShellEntry) -> Result<(), Box<dyn std::error::Error>> {
-        let db = GLOBAL_DB
+        let db = SHELL_DB
             .lock()
             .map_err(|e| format!("DB lock error: {}", e))?;
 
@@ -130,9 +121,9 @@ impl ShellMon {
             db.insert_shell(
                 &entry.content,
                 entry.timestamp,
+                entry.working_dir.as_deref(),
                 entry.user.as_deref(),
                 entry.host.as_deref(),
-                entry.working_dir.as_deref(),
                 "Terminal",
                 "unknown",
                 Some(embeds),

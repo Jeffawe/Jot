@@ -8,7 +8,7 @@ use std::sync::Mutex;
 mod cache;
 use cache::FingerprintCache;
 
-use crate::types::{EntryType};
+use crate::types::EntryType;
 
 const ASSOCIATION_DEPTH: i64 = 3;
 const CLEAN_SESSIONS_DAYS: i64 = 90;
@@ -37,13 +37,13 @@ impl Database {
                 println!("Failed to create cache: {}", e);
                 return Err(rusqlite::Error::InvalidQuery);
             }
-            
         }
 
-         // Enable WAL mode for better concurrency
+        // Enable WAL mode for better concurrency
 
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
 
         let db = Database { conn, cache };
         db.init_schema()?;
@@ -57,7 +57,9 @@ impl Database {
 
     fn get_cache_path() -> PathBuf {
         let home = std::env::var("HOME").expect("HOME not set");
-        PathBuf::from(home).join(".jotx").join("fingerprint_cache.db")
+        PathBuf::from(home)
+            .join(".jotx")
+            .join("fingerprint_cache.db")
     }
 
     fn init_schema(&self) -> Result<()> {
@@ -94,7 +96,7 @@ impl Database {
         )?;
 
         self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_entries_host ON entries(host)",
+            "CREATE INDEX IF NOT EXISTS idx_entries_working_dir ON entries(working_dir)",
             [],
         )?;
 
@@ -279,7 +281,7 @@ impl Database {
         let existing: Option<(i64, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT id, host FROM entries 
+                "SELECT id, working_dir FROM entries 
              WHERE entry_type = 'shell' 
              AND content = ?1
              ORDER BY timestamp DESC
@@ -289,18 +291,18 @@ impl Database {
             )
             .ok();
 
-        let entry_id = if let Some((id, existing_host)) = existing {
-            // Check if existing host is null/empty
-            let existing_host_empty = existing_host
+        let entry_id = if let Some((id, exisitng_working_dir)) = existing {
+            // Check if existing working dir is null/empty
+            let existing_dir_empty = exisitng_working_dir
                 .as_ref()
                 .map(|h| h.trim().is_empty())
                 .unwrap_or(true);
 
-            if existing_host_empty {
-                // Old entry has no host - update with new host info, DON'T increment times_run
+            if existing_dir_empty {
+                // Old entry has no working dir - update with new working dir info, DON'T increment times_run
                 self.conn.execute(
                     "UPDATE entries 
-                 SET host = ?2,
+                    SET host = ?2,
                      working_dir = ?3,
                      user = ?4,
                      app_name = ?5,
@@ -319,8 +321,8 @@ impl Database {
                     ],
                 )?;
                 id
-            } else if existing_host == host.map(|h| h.to_string()) {
-                // Same command + same host: increment times_run
+            } else if exisitng_working_dir == working_dir.map(|h| h.to_string()) {
+                // Same command + same working dir: increment times_run
                 self.conn.execute(
                     "UPDATE entries 
                  SET times_run = times_run + 1, 
@@ -331,7 +333,7 @@ impl Database {
                 )?;
                 id
             } else {
-                // Different host: insert as new entry
+                // Different working dir: insert as new entry
                 self.conn.execute(
                 "INSERT INTO entries (entry_type, content, timestamp, working_dir, user, host, app_name, window_title, embedding)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -635,5 +637,12 @@ impl Database {
     // }
 }
 
-pub static GLOBAL_DB: Lazy<Mutex<Database>> =
-    Lazy::new(|| Mutex::new(Database::new().expect("Failed to initialize database")));
+pub static USER_DB: Lazy<Mutex<Database>> =
+    Lazy::new(|| Mutex::new(Database::new().expect("Failed to initialize user database")));
+
+pub static CLIPBOARD_DB: Lazy<Mutex<Database>> =
+    Lazy::new(|| Mutex::new(Database::new().expect("Failed to init clipboard DB")));
+
+// Shell monitor thread
+pub static SHELL_DB: Lazy<Mutex<Database>> =
+    Lazy::new(|| Mutex::new(Database::new().expect("Failed to init shell DB")));

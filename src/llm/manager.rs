@@ -1,11 +1,11 @@
 use once_cell::sync::Lazy;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use std::process::Command;
 use reqwest::Client;
 use std::sync::Arc;
 
 use super::{LlmModel, default::OllamaModel};
-use crate::config::{GLOBAL_CONFIG, LlmConfig};
+use crate::config::{Config, GLOBAL_CONFIG, LlmConfig};
 
 pub struct LlmManager {
     model: Option<Arc<Box<dyn LlmModel>>>,
@@ -36,18 +36,11 @@ impl std::error::Error for LlmError {}
 
 impl LlmManager {
     pub fn new() -> Self {
-        let config = match GLOBAL_CONFIG.lock() {
+        let config = match GLOBAL_CONFIG.read() {
             Ok(cfg) => cfg.llm.clone(),
             Err(_) => {
-                LlmConfig {
-                    provider: "ollama".to_string(),
-                    api_key: None,
-                    max_history_results: 5,
-                    model: "llama2".to_string(),
-                    api_base: None,
-                    max_tokens: 512,
-                    temperature: 0.7,
-                }
+                let config = Config::default();
+                config.llm.clone()
             }
         };
 

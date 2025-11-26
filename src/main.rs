@@ -5,43 +5,25 @@ use std::thread;
 use std::time::{Duration, Instant};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-mod ask;
-mod clipboard;
-mod commands;
-mod config;
-mod context;
-mod db;
-mod embeds;
-mod llm;
-mod managers;
-mod pid_controller;
-mod plugin;
-mod settings;
-mod shell;
-mod types;
+use jotx::types::{Cli, Commands};
 
-use types::{Cli, Commands};
+use jotx::ask::{search, AskResponse, ask};
+use jotx::commands::{get_working_directory, run_make, show_settings, get_plugin_dir};
+use jotx::config::reload_config;
+use jotx::llm::handle_llm;
 
-use ask::ask_handler::{AskResponse, ask};
-use ask::search_handler::search;
-use commands::{get_working_directory, run_make, show_settings};
-use config::reload_config;
-use llm::handle_llm;
-
-use clipboard::clip_mon::GLOBAL_CLIP_MON;
-use config::GLOBAL_CONFIG;
-use db::GLOBAL_DB;
-use plugin::{
+use jotx::clipboard::clip_mon::GLOBAL_CLIP_MON;
+use jotx::config::GLOBAL_CONFIG;
+use jotx::db::USER_DB;
+use jotx::plugin::{
     CommandContext, DaemonContext, GLOBAL_PLUGIN_MANAGER, SensitiveCommandFilter,
     check_plugin_functions, create_new_plugin_script,
 };
-use settings::GLOBAL_SETTINGS;
-use shell::shell_mon::GLOBAL_SHELL_MON;
+use jotx::settings::GLOBAL_SETTINGS;
+use jotx::shell::shell_mon::GLOBAL_SHELL_MON;
 
-use managers::shutdown_manager::{on_shutdown, shutdown};
-use pid_controller::{is_running, remove_pid, save_pid};
-
-use crate::commands::get_plugin_dir;
+use jotx::managers::shutdown_manager::{on_shutdown, shutdown};
+use jotx::pid_controller::{is_running, remove_pid, save_pid, PID_FILE};
 
 const CLIP_SLEEP_DURATION_SECS: u64 = 1;
 const SHELL_SLEEP_DURATION_SECS: u64 = 3600;
@@ -63,16 +45,24 @@ async fn main() {
         Commands::Ask { query, print_only } => {
             let pwd = get_working_directory();
 
-            let ask_result = ask(&query, &pwd, print_only);
-            if let Some(result) = ask_to_string(ask_result.await) {
-                if print_only {
-                    print!("{}", result);
+            let ask_result = ask(&query, &pwd, print_only).await;
+            match ask_result {
+                Ok(value) => {
+                    if let Some(result) = ask_to_string(value) {
+                        if print_only {
+                            print!("{}", result);
+                        }
+                    }
                 }
-            } else if print_only {
-                std::process::exit(1);
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    if print_only {
+                        std::process::exit(1);
+                    }
+                }
             }
         }
-        Commands::Cleanup => force_maintain(),
+        Commands::Cleanup => maintain(),
         Commands::Search { query, print_only } => {
             let pwd = std::env::current_dir()
                 .map(|p| p.to_string_lossy().to_string())
@@ -153,7 +143,7 @@ fn start_service() {
         return;
     }
 
-    println!("🚀 Starting application...\n");
+    println!("🚀 Starting Background Services...\n");
 
     // Set up Ctrl+C handler (uses global RUNNING)
     ctrlc::set_handler(move || {
@@ -195,7 +185,7 @@ fn stop_service() {
     }
 
     println!("Stopping service...");
-    if let Ok(pid_str) = std::fs::read_to_string(pid_controller::PID_FILE) {
+    if let Ok(pid_str) = std::fs::read_to_string(PID_FILE) {
         if let Ok(pid) = pid_str.trim().parse::<u32>() {
             let _ = std::process::Command::new("kill")
                 .arg(pid.to_string())
@@ -240,7 +230,7 @@ pub fn run_service() {
     thread::spawn(move || {
         while is_running() {
             if let Ok(settings) = GLOBAL_SETTINGS.lock() {
-                if settings.capture_shell {
+                if settings.capture_shell && settings.capture_shell_history_with_files {
                     // Lock the mutex to get mutable access
                     if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
                         if let Err(e) = monitor.read_files() {
@@ -262,7 +252,7 @@ pub fn run_service() {
     };
 
     while is_running() {
-        if let Ok(config) = GLOBAL_CONFIG.lock() {
+        if let Ok(config) = GLOBAL_CONFIG.read() {
             if last_maintenance.elapsed().as_secs()
                 >= config.storage.maintenance_interval_days * 86400
             {
@@ -307,60 +297,59 @@ fn capture_command(cmd: &str, pwd: Option<String>, user: Option<String>, host: O
         .unwrap()
         .as_secs();
 
-    if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
-        if cmd.starts_with(SERVICE_NAME) || cmd.starts_with(SERVICE_NAME_SHORT) {
-            return;
-        }
+    if cmd.starts_with(SERVICE_NAME) || cmd.starts_with(SERVICE_NAME_SHORT) {
+        return;
+    }
 
-        if let Ok(plugins) = GLOBAL_PLUGIN_MANAGER.lock() {
-            let command_capture = CommandContext {
-                command: cmd.to_string(),
-                working_dir: pwd.clone().unwrap_or_default(),
-                user: user.clone().unwrap_or_default(),
-                host: host.clone().unwrap_or_default(),
-                timestamp,
-            };
+    let should_capture = {
+        GLOBAL_SETTINGS
+            .lock()
+            .ok()
+            .map(|s| s.capture_shell)
+            .unwrap_or(false)
+    };
 
-            if plugins.trigger_command_captured(&command_capture) {
-                monitor.add_command(cmd.to_string(), timestamp, pwd, user, host);
-            }
+    if !should_capture {
+        return;
+    }
+
+    let should_add = {
+        GLOBAL_PLUGIN_MANAGER
+            .lock()
+            .ok()
+            .map(|plugins| {
+                plugins.trigger_command_captured(&CommandContext {
+                    command: cmd.to_string(),
+                    working_dir: pwd.clone().unwrap_or_default(),
+                    user: user.clone().unwrap_or_default(),
+                    host: host.clone().unwrap_or_default(),
+                    timestamp,
+                })
+            })
+            .unwrap_or(true)
+    };
+
+    if should_add {
+        if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
+            monitor.add_command(cmd.to_string(), timestamp, pwd, user, host);
         }
     }
 }
 
 fn maintain() {
-    if let Ok(settings) = GLOBAL_SETTINGS.lock() {
-        if let Ok(db) = GLOBAL_DB.lock() {
-            // Always clean up old entries (this is cheap and frequent)
-            if let Err(e) = db.cleanup_old_entries(settings.clipboard_limit, settings.shell_limit) {
-                eprintln!("Cleanup error: {}", e);
-            }
+    let (clipboard_limit, shell_limit) = {
+        let settings = GLOBAL_SETTINGS.lock().unwrap();
+        (settings.clipboard_limit, settings.shell_limit)
+    };
 
-            // Only run full maintenance if it's been a while (expensive)
-            if db.should_run_maintenance() {
-                if let Err(e) = db.run_maintenance() {
-                    eprintln!("Maintenance error: {}", e);
-                } else {
-                    // Update last maintenance timestamp
-                    if let Err(e) = db.update_last_maintenance() {
-                        eprintln!("Failed to update maintenance timestamp: {}", e);
-                    }
-                }
-            }
+    if let Ok(db) = USER_DB.lock() {
+        // Always clean up old entries (this is cheap and frequent)
+        if let Err(e) = db.cleanup_old_entries(clipboard_limit, shell_limit) {
+            eprintln!("Cleanup error: {}", e);
         }
-    }
 
-    print!("Database maintenance completed\n");
-}
-
-fn force_maintain() {
-    if let Ok(settings) = GLOBAL_SETTINGS.lock() {
-        if let Ok(db) = GLOBAL_DB.lock() {
-            // Always clean up old entries (this is cheap and frequent)
-            if let Err(e) = db.cleanup_old_entries(settings.clipboard_limit, settings.shell_limit) {
-                eprintln!("Cleanup error: {}", e);
-            }
-
+        // Only run full maintenance if it's been a while (expensive)
+        if db.should_run_maintenance() {
             if let Err(e) = db.run_maintenance() {
                 eprintln!("Maintenance error: {}", e);
             } else {
@@ -381,8 +370,8 @@ pub fn reload() {
     }
 }
 
-fn ask_to_string(resp: Result<AskResponse, Box<dyn std::error::Error>>) -> Option<String> {
-    match resp.ok()? {
+fn ask_to_string(resp: AskResponse) -> Option<String> {
+    match resp {
         AskResponse::Knowledge(s) => Some(s),
         AskResponse::SearchResults(opt) => opt,
     }

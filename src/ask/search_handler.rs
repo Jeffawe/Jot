@@ -1,15 +1,17 @@
-use crate::config::GLOBAL_CONFIG;
-use crate::db::GLOBAL_DB;
-use crate::llm::{LLMQueryParams, TimeRange};
-use crate::plugin::GLOBAL_PLUGIN_MANAGER;
-
-use crate::types::SearchResult;
+use chrono::{Duration, Local};
 use console::Term;
 use dialoguer::Select;
+use std::collections::HashSet;
+
+use crate::config::GLOBAL_CONFIG;
+use crate::db::USER_DB;
+use crate::llm::{LLMQueryParams, SimpleTimeRange};
+use crate::plugin::GLOBAL_PLUGIN_MANAGER;
+use crate::types::{GUISearchResult, SearchResult};
 
 const MAX_RESULTS: usize = 10;
 
-pub fn search(query: &str, context: &str, print_only: bool) -> Option<String> {
+pub fn search(query: &str, directory: &str, print_only: bool) -> Option<String> {
     if query.is_empty() {
         if !print_only {
             println!("No query provided. Use jotx search <query>");
@@ -23,7 +25,7 @@ pub fn search(query: &str, context: &str, print_only: bool) -> Option<String> {
     }
 
     // Try keyword search first
-    match keyword_search(query, context) {
+    match keyword_search(query, directory) {
         Ok(results) if !results.is_empty() => {
             return display_results_interactive(
                 query,
@@ -42,12 +44,36 @@ pub fn search(query: &str, context: &str, print_only: bool) -> Option<String> {
     }
 }
 
-// Keyword search using SQLite FTS5
-fn keyword_search(
+pub fn search_gui(
     query: &str,
-    context: &str,
+    directory: &str,
+) -> Result<Vec<GUISearchResult>, Box<dyn std::error::Error>> {
+    if query.is_empty() {
+        return Err("No query provided.".into());
+    }
+
+    // Try keyword search first
+    match keyword_search(query, directory) {
+        Ok(results) if !results.is_empty() => Ok(results
+            .into_iter()
+            .map(|r| GUISearchResult {
+                title: "Result".to_string(),
+                content: r.content,
+                source: r.entry_type,
+                timestamp: r.timestamp,
+                score: r.similarity,
+            })
+            .collect()),
+        _ => Err(format!("No results found for '{}'", query).into()),
+    }
+}
+
+// Keyword search using SQLite FTS5
+pub fn keyword_search(
+    query: &str,
+    directory: &str,
 ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
-    let db = GLOBAL_DB
+    let db = USER_DB
         .lock()
         .map_err(|e| format!("DB lock error: {}", e))?;
 
@@ -57,18 +83,18 @@ fn keyword_search(
     let use_fts = query.len() >= 3;
 
     let mut stmt;
-    
+
     let mut results: Vec<SearchResult>;
 
     if use_fts {
         // --- EXISTING FTS LOGIC ---
         let fts_query = format!("{}*", query);
-        
+
         stmt = db.conn.prepare(
             "SELECT e.id, e.entry_type, e.content, e.timestamp, e.times_run, 
                     e.working_dir, e.host, e.app_name, e.window_title,
                     CASE 
-                        WHEN e.host = ?2 AND ?2 != '' THEN 15.0
+                        WHEN e.working_dir = ?2 AND ?2 != '' THEN 15.0
                         ELSE 0.0
                     END as pwd_boost
              FROM entries_fts 
@@ -78,31 +104,31 @@ fn keyword_search(
              LIMIT 50",
         )?;
 
-        results = stmt.query_map(rusqlite::params![&fts_query, context], |row| {
-            Ok(SearchResult {
-                id: row.get(0)?,
-                entry_type: row.get(1)?,
-                content: row.get(2)?,
-                timestamp: row.get(3)?,
-                times_run: row.get(4)?,
-                working_dir: row.get(5)?,
-                host: row.get(6)?,
-                app_name: row.get(7)?,
-                window_title: row.get(8)?,
-                similarity: row.get::<_, f32>(9)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-
+        results = stmt
+            .query_map(rusqlite::params![&fts_query, directory], |row| {
+                Ok(SearchResult {
+                    id: row.get(0)?,
+                    entry_type: row.get(1)?,
+                    content: row.get(2)?,
+                    timestamp: row.get(3)?,
+                    times_run: row.get(4)?,
+                    working_dir: row.get(5)?,
+                    host: row.get(6)?,
+                    app_name: row.get(7)?,
+                    window_title: row.get(8)?,
+                    similarity: row.get::<_, f32>(9)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
     } else {
         // --- FALLBACK LIKE LOGIC (For 1-2 char queries) ---
-        let like_query = format!("%{}%", query); 
-        
+        let like_query = format!("%{}%", query);
+
         stmt = db.conn.prepare(
             "SELECT e.id, e.entry_type, e.content, e.timestamp, e.times_run, 
                     e.working_dir, e.host, e.app_name, e.window_title,
                     CASE 
-                        WHEN e.host = ?2 AND ?2 != '' THEN 15.0
+                        WHEN e.working_dir = ?2 AND ?2 != '' THEN 15.0
                         ELSE 0.0
                     END as pwd_boost
              FROM entries e
@@ -111,29 +137,30 @@ fn keyword_search(
              LIMIT 50",
         )?;
 
-        results = stmt.query_map(rusqlite::params![&like_query, context], |row| {
-            Ok(SearchResult {
-                id: row.get(0)?,
-                entry_type: row.get(1)?,
-                content: row.get(2)?,
-                timestamp: row.get(3)?,
-                times_run: row.get(4)?,
-                working_dir: row.get(5)?,
-                host: row.get(6)?,
-                app_name: row.get(7)?,
-                window_title: row.get(8)?,
-                similarity: row.get::<_, f32>(9)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
+        results = stmt
+            .query_map(rusqlite::params![&like_query, directory], |row| {
+                Ok(SearchResult {
+                    id: row.get(0)?,
+                    entry_type: row.get(1)?,
+                    content: row.get(2)?,
+                    timestamp: row.get(3)?,
+                    times_run: row.get(4)?,
+                    working_dir: row.get(5)?,
+                    host: row.get(6)?,
+                    app_name: row.get(7)?,
+                    window_title: row.get(8)?,
+                    similarity: row.get::<_, f32>(9)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
     }
 
     let query_lower = query.to_lowercase();
 
     // Calculate detailed relevance scores for top 50 results only
     for result in &mut results {
-        let host = result.host.as_deref().unwrap_or("");
-        let base_score = calculate_relevance_score(&result.content, &query_lower, host, context);
+        let working_dir = result.working_dir.as_deref().unwrap_or("");
+        let base_score = calculate_relevance_score(&result.content, &query_lower, working_dir, directory);
 
         // Add frequency bonus (times_run)
         let frequency_bonus = (result.times_run as f32).min(10.0) * 2.0; // Max +20 points
@@ -147,6 +174,9 @@ fn keyword_search(
             .partial_cmp(&a.similarity)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+
+    let mut seen = HashSet::new();
+    results.retain(|item| seen.insert(item.content.clone()));
 
     // Return top 20 for display
     results.truncate(20);
@@ -227,6 +257,9 @@ pub fn display_results_interactive<'a>(
     print_only: bool,
 ) -> Option<&'a SearchResult> {
     if results.is_empty() {
+        if !print_only {
+            println!("❌ No results found for '{}'", query);
+        }
         return None;
     }
 
@@ -250,7 +283,7 @@ pub fn display_results_interactive<'a>(
         })
         .collect();
 
-    if let Ok(config) = GLOBAL_CONFIG.lock() {
+    if let Ok(config) = GLOBAL_CONFIG.read() {
         let max_results = config.search.max_results;
         if max_results > 0 {
             items.truncate(max_results);
@@ -281,34 +314,12 @@ fn trigger_plugins(query: &str, results: &[SearchResult]) {
     }
 }
 
-/// Search using LLM-interpreted parameters
-pub fn search_with_llm_params(
-    params: &LLMQueryParams,
-    context: &str,
-    print_only: bool,
-) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
-    // Only show UI messages if NOT print_only mode
-    if !print_only {
-        println!("🔍 Searching with AI parameters...\n");
-    }
-
-    match keyword_search_with_params(params, context) {
-        Ok(results) if !results.is_empty() => Ok(results),
-        _ => {
-            if !print_only {
-                println!("❌ No results found");
-            }
-            return Ok(vec![]);
-        }
-    }
-}
-
 /// Keyword search using LLM-extracted parameters
-fn keyword_search_with_params(
+pub fn keyword_search_with_params(
     params: &LLMQueryParams,
-    context: &str,
+    directory: &str,
 ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
-    let db = GLOBAL_DB
+    let db = USER_DB
         .lock()
         .map_err(|e| format!("DB lock error: {}", e))?;
 
@@ -317,7 +328,8 @@ fn keyword_search_with_params(
         "*".to_string()
     } else {
         // Join keywords with OR for broader matching
-        params.keywords
+        params
+            .keywords
             .iter()
             .map(|k| format!("{}*", k))
             .collect::<Vec<_>>()
@@ -331,82 +343,109 @@ fn keyword_search_with_params(
 
     // Entry type filter
     if let Some(ref types) = params.entry_types {
-        if !types.is_empty() {
-            let placeholders = types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-            where_clauses.push(format!("e.entry_type IN ({})", placeholders));
-            for t in types {
-                bind_params.push(Box::new(t.clone()));
-            }
+        if !types.is_empty() && types != "null" {
+            where_clauses.push(format!("e.entry_type = ?{}", param_index));
+            bind_params.push(Box::new(types.clone()));
+            param_index += 1;
         }
     }
 
     // Time range filter
     if let Some(ref time_range) = params.time_range {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-        
-        let timestamp_start = match time_range {
-            TimeRange::Today => now - (24 * 60 * 60),
-            TimeRange::Yesterday => {
-                let today_start = now - (now % (24 * 60 * 60));
-                today_start - (24 * 60 * 60)
+        let (start_ts, end_ts) = match time_range {
+            SimpleTimeRange::Today => {
+                let now = Local::now();
+                let start = now
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_local_timezone(Local)
+                    .unwrap();
+                (start.timestamp(), now.timestamp())
             }
-            TimeRange::LastWeek => now - (7 * 24 * 60 * 60),
-            TimeRange::LastMonth => now - (30 * 24 * 60 * 60),
-            TimeRange::Custom { start, end: _ } => *start,
+            SimpleTimeRange::Yesterday => {
+                let now = Local::now();
+                let today_start = now
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_local_timezone(Local)
+                    .unwrap();
+                let yesterday_start = today_start - Duration::days(1);
+                // End is today_start (exclusive)
+                (yesterday_start.timestamp(), today_start.timestamp())
+            }
+            SimpleTimeRange::LastWeek => {
+                let now = Local::now();
+                (now.timestamp() - (7 * 24 * 60 * 60), now.timestamp())
+            }
+            SimpleTimeRange::LastMonth => {
+                let now = Local::now();
+                (now.timestamp() - (30 * 24 * 60 * 60), now.timestamp())
+            }
+            SimpleTimeRange::Custom => {
+                let start = *params.custom_start.as_ref().unwrap_or(&0);
+                // Default end to NOW if not provided
+                let end = *params
+                    .custom_end
+                    .as_ref()
+                    .unwrap_or(&Local::now().timestamp());
+                (start, end)
+            }
         };
-        
-        where_clauses.push(format!("e.timestamp >= ?{}", param_index));
-        bind_params.push(Box::new(timestamp_start));
-        param_index += 1;
-        
-        // Handle custom end time
-        if let TimeRange::Custom { start: _, end } = time_range {
-            where_clauses.push(format!("e.timestamp <= ?{}", param_index));
-            bind_params.push(Box::new(*end));
-            param_index += 1;
-        }
-    }
 
-    // Working directory filter
-    if let Some(ref filters) = params.filters {
-        if let Some(ref working_dir) = filters.working_dir {
-            where_clauses.push(format!("e.host LIKE ?{}", param_index));
-            bind_params.push(Box::new(format!("%{}%", working_dir)));
+        // Apply Start Time
+        where_clauses.push(format!("e.timestamp >= ?{}", param_index));
+        bind_params.push(Box::new(start_ts));
+        param_index += 1;
+
+        // Apply End Time (Crucial for "Yesterday" or "Custom")
+        // We generally apply this for all queries to be safe, or you can optimize
+        if matches!(
+            time_range,
+            SimpleTimeRange::Yesterday | SimpleTimeRange::Custom
+        ) {
+            where_clauses.push(format!("e.timestamp < ?{}", param_index)); // Note: < for end time (exclusive)
+            bind_params.push(Box::new(end_ts));
             param_index += 1;
         }
     }
 
     // Build final SQL query
     let where_clause = where_clauses.join(" AND ");
+    println!("WHERE CLAUSE: {}", where_clause);
+    println!("BIND PARAMS LEN: {}", bind_params.len());
+    println!("Param Index: {}", param_index);
+
     let sql = format!(
         "SELECT e.id, e.entry_type, e.content, e.timestamp, e.times_run, 
-                e.working_dir, e.host, e.app_name, e.window_title,
-                CASE 
-                    WHEN e.host = ?{} AND ?{} != '' THEN 15.0
-                    WHEN (e.host LIKE ?{} || '%' OR ?{} LIKE e.host || '%') AND ?{} != '' AND e.host != '' THEN 8.0
-                    ELSE 0.0
-                END as pwd_boost
-         FROM entries_fts 
-         JOIN entries e ON entries_fts.rowid = e.id
-         WHERE {}
-         ORDER BY pwd_boost DESC, e.times_run DESC, e.timestamp DESC
-         LIMIT 50",
-        param_index, param_index, param_index, param_index, param_index,
+            e.working_dir, e.host, e.app_name, e.window_title,
+            CASE 
+                WHEN e.working_dir = ?{} THEN 15.0
+                WHEN e.working_dir LIKE ?{} || '%' OR ?{} LIKE e.working_dir || '%' THEN 8.0
+                ELSE 0.0
+            END as pwd_boost
+    FROM entries_fts 
+    JOIN entries e ON entries_fts.rowid = e.id
+    WHERE {}
+    ORDER BY pwd_boost DESC, e.times_run DESC, e.timestamp DESC
+    LIMIT 50",
+        param_index,
+        param_index + 1,
+        param_index + 2,
         where_clause
     );
 
-    // Add context as final parameter
-    bind_params.push(Box::new(context.to_string()));
+    for _ in 0..3 {
+        bind_params.push(Box::new(directory.to_string()));
+    }
 
     // Prepare statement
     let mut stmt = db.conn.prepare(&sql)?;
 
     // Execute query with dynamic parameters
     let params_refs: Vec<&dyn rusqlite::ToSql> = bind_params.iter().map(|b| b.as_ref()).collect();
-    
+
     let mut results: Vec<SearchResult> = stmt
         .query_map(params_refs.as_slice(), |row| {
             Ok(SearchResult {
@@ -426,10 +465,10 @@ fn keyword_search_with_params(
 
     // Calculate relevance scores
     let query_str = params.keywords.join(" ").to_lowercase();
-    
+
     for result in &mut results {
-        let host = result.host.as_deref().unwrap_or("");
-        let base_score = calculate_relevance_score(&result.content, &query_str, host, context);
+        let working_dir = result.working_dir.as_deref().unwrap_or("");
+        let base_score = calculate_relevance_score(&result.content, &query_str, working_dir, directory);
         let frequency_bonus = (result.times_run as f32).min(10.0) * 2.0;
         result.similarity = base_score + frequency_bonus;
     }
@@ -440,6 +479,9 @@ fn keyword_search_with_params(
             .partial_cmp(&a.similarity)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+
+    let mut seen = HashSet::new();
+    results.retain(|item| seen.insert(item.content.clone()));
 
     results.truncate(20);
 

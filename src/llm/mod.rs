@@ -11,26 +11,33 @@ pub use handle_llm::handle_llm;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMQueryParams {
     pub keywords: Vec<String>,
-    pub entry_types: Option<Vec<String>>,
-    pub time_range: Option<TimeRange>,
+    #[serde(default)]
+    pub entry_types: Option<String>,
+    #[serde(default)]
+    pub time_range: Option<SimpleTimeRange>,
+    #[serde(default)]
+    pub custom_start: Option<i64>,
+    #[serde(default)]
+    pub custom_end: Option<i64>,
+    #[serde(default)]
     pub filters: Option<QueryFilters>,
+    #[serde(default)]
     pub use_semantic: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TimeRange {
+#[serde(rename_all = "snake_case")] // FIX: Allows "yesterday" to match "Yesterday"
+pub enum SimpleTimeRange {
     Today,
     Yesterday,
     LastWeek,
     LastMonth,
-    Custom { start: i64, end: i64 },
+    Custom, // No data here, just a marker
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryFilters {
     pub working_dir: Option<String>,
-    pub git_repo: Option<String>,
-    pub git_branch: Option<String>,
     pub app_name: Option<String>,
 }
 

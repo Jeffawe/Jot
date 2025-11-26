@@ -3,6 +3,13 @@ name = "jotx"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = [".", "src-tauri"]
+
+[lib]
+name = "jotx"
+path = "src/lib.rs"
+
 [dependencies]
 copypasta = "0.10"
 x-win = "5.3.3"
@@ -11,7 +18,7 @@ clap = { version = "4.5.53", features = ["derive"] }
 ctrlc = "3.4"
 pid = "4.0"
 rusqlite = { version = "0.37", features = ["bundled"] }
-fastembed = "5.2.1"
+fastembed = "5.3.0"
 console = { version = "0.16", features = ["std"] }
 byteorder = "1.5"
 dirs = "6.0.0"
@@ -24,3 +31,4 @@ reqwest = "0.12.24"
 async-trait = "0.1"
 colored = "3.0.0"
 rhai = { version = "1.19", features = ["serde", "internals", "sync"] }
+chrono = "0.4.42"

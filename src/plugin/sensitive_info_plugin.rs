@@ -18,11 +18,11 @@ impl Plugin for SensitiveCommandFilter {
     }
     
     fn on_command_captured(&self, context: &CommandContext) -> Result<PluginAction, String> {
-        let sensitive_patterns = ["export AWS_SECRET", "password=", "--token"];
+        let sensitive_patterns = ["export AWS_SECRET", "password=", "--token", "./target/debug/jotx"];
         
         for pattern in sensitive_patterns {
+            println!("Checking command for sensitive pattern: {}", pattern);
             if context.command.contains(pattern) {
-                println!("🔒 Blocked capturing sensitive command");
                 return Ok(PluginAction::Skip);
             }
         }

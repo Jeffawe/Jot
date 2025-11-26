@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jotx</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="light-theme">
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="app-title">Jotx</div>
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-tab="home">
+                    <span class="tab-icon">🏠</span>
+                    <span>Home</span>
+                </button>
+                <button class="nav-tab" data-tab="paths">
+                    <span class="tab-icon">📂</span>
+                    <span>Paths</span>
+                </button>
+                <button class="nav-tab" data-tab="settings">
+                    <span class="tab-icon">⚙️</span>
+                    <span>Settings</span>
+                </button>
+            </nav>
+            <div class="theme-toggle-container">
+                <button id="theme-toggle" class="theme-toggle">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Home Tab -->
+            <div id="home-tab" class="tab-content active">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="welcome-message">
+                            <h2>Welcome to Jotx</h2>
+                            <p>Ask questions or search through your content</p>
+                        </div>
+                    </div>
+                    
+                    <div class="input-container">
+                        <div class="input-wrapper">
+                            <select id="mode-select" class="mode-select">
+                                <option value="ask">Ask</option>
+                                <option value="search">Search</option>
+                            </select>
+                            <input 
+                                type="text" 
+                                id="query-input" 
+                                class="query-input" 
+                                placeholder="Type your query here..."
+                                autocomplete="off"
+                            >
+                            <button id="send-button" class="send-button">
+                                <span>→</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paths Tab -->
+            <div id="paths-tab" class="tab-content">
+                <div class="content-header">
+                    <h2>Paths</h2>
+                    <p>Quick access to your important directories</p>
+                </div>
+                <div class="paths-list" id="paths-list">
+                    <!-- Paths will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings-tab" class="tab-content">
+                <div class="content-header">
+                    <h2>Settings</h2>
+                    <p>Configure your preferences</p>
+                </div>
+                <div class="settings-content">
+                    <p class="placeholder-text">Settings will be added here</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

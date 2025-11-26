@@ -74,6 +74,7 @@ impl PluginManager {
     /// Trigger hook on all plugins
     pub fn trigger_command_captured(&self, context: &CommandContext) -> bool {
         for plugin in &self.plugins {
+            println!("Triggering plugin: {}", plugin.name());
             match plugin.on_command_captured(context) {
                 Ok(PluginAction::Stop) => return false,
                 Ok(PluginAction::Skip) => return false,

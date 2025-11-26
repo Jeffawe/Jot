@@ -98,7 +98,7 @@ Configuration file: `~/.jotx/config.toml`
 [llm]
 provider = "ollama"
 api_base = "http://localhost:11434"
-model = "llama2"
+model = "qwen2.5:1.5b"
 max_tokens = 500
 temperature = 0.7
 max_history_results = 10
