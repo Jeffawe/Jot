@@ -132,7 +132,7 @@ pub enum Commands {
 
     /// Setup jotx
     #[command(hide = true)]
-    FullSetup,
+    Setup,
 
     /// Setup hooks for jotx
     #[command(hide = true)]

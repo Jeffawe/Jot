@@ -151,7 +151,7 @@ async fn main() {
                 eprintln!("Error installing llm: {}", e);
             }
         }
-        Commands::FullSetup => {
+        Commands::Setup => {
             if let Err(e) = full_setup() {
                 eprintln!("Error setting up: {}", e);
             }
