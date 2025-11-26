@@ -19,7 +19,7 @@ use jotx::plugin::{
     check_plugin_functions, create_new_plugin_script,
 };
 use jotx::settings::GLOBAL_SETTINGS;
-use jotx::setup::{clean_data, full_setup, install_llm, setup_hooks, uninstall};
+use jotx::setup::{clean_data, full_setup, install_llm, setup_hooks, uninstall, update};
 use jotx::shell::shell_mon::GLOBAL_SHELL_MON;
 
 use jotx::managers::shutdown_manager::{on_shutdown, shutdown};
@@ -123,6 +123,11 @@ async fn main() {
                 eprintln!("Error updating privacy settings: {}", e);
             }
         }
+        Commands::Update => {
+            if let Err(e) = update() {
+                eprintln!("Error updating: {}", e);
+            }
+        },
         Commands::Exit => stop_service(),
         Commands::InternalDaemon => {
             save_pid();

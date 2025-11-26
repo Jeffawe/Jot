@@ -328,3 +328,23 @@ pub fn uninstall(force: bool) -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
+
+pub fn update() -> Result<(), Box<dyn std::error::Error>> {
+    use std::process::Command;
+    
+    println!("📦 Downloading latest version...");
+    
+    let status = Command::new("bash")
+        .arg("-c")
+        .arg("curl -fsSL https://raw.githubusercontent.com/Jeffawe/Jot/main/install.sh | bash")
+        .status()?;
+    
+    if status.success() {
+        println!("✅ Update complete!");
+        println!("Restart jotx with: jotx run");
+    } else {
+        return Err("Update failed".into());
+    }
+    
+    Ok(())
+}

@@ -107,6 +107,8 @@ pub enum Commands {
     Cleanup,
     /// Clean All Data
     CleanData,
+    /// Update to latest version
+    Update,
     /// Gracefully stop the running service
     Exit,
     /// Uninstall jotx service and remove data
