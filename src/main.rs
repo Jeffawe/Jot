@@ -78,9 +78,11 @@ async fn main() {
         }
         Commands::Status => {
             if is_running() {
-                println!("jotx is RUNNING");
+                println!("✅ Jotx is running");
+                std::process::exit(0);
             } else {
-                println!("jotx is STOPPED");
+                println!("⏹️ Jotx is stopped");
+                std::process::exit(1);
             }
         }
         Commands::HandleLlm => match handle_llm().await {
@@ -127,7 +129,7 @@ async fn main() {
             if let Err(e) = update() {
                 eprintln!("Error updating: {}", e);
             }
-        },
+        }
         Commands::Exit => stop_service(),
         Commands::InternalDaemon => {
             save_pid();

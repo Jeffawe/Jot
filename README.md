@@ -1,4 +1,4 @@
-# jot
+# jotx
 
 > Your digital memory. Search everything you've copied or typed, instantly.
 

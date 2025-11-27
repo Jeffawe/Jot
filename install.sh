@@ -113,17 +113,14 @@ if "$BINARY_PATH" setup; then
     
     # Try to start jotx in background
     echo -e "${YELLOW}▶️  Starting jotx daemon...${NC}"
-    if "$BINARY_PATH" run > /dev/null 2>&1 &  then
-        sleep 2  # Give it time to start
-        if "$BINARY_PATH" status > /dev/null 2>&1; then
-            echo -e "${GREEN}✅ Jotx is running in the background!${NC}"
-        else
-            echo -e "${YELLOW}⚠️  Jotx may need manual start${NC}"
-            echo -e "Run ${GREEN}jotx run${NC} to start it"
-        fi
+    "$BINARY_PATH" run > /dev/null 2>&1 &
+    sleep 2  # Give it time to start
+    
+    if "$BINARY_PATH" status > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Jotx is running in the background!${NC}"
     else
-        echo -e "${YELLOW}⚠️  Could not start automatically${NC}"
-        echo -e "Run ${GREEN}jotx run${NC} to start jotx"
+        echo -e "${YELLOW}⚠️  Jotx may need manual start${NC}"
+        echo -e "Run ${GREEN}jotx run${NC} to start it"
     fi
     
     echo ""
