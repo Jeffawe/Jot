@@ -48,8 +48,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: jotx-gui/package-lock.json
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -63,7 +61,7 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
-        working-directory: jotx-gui
+        working-directory: src-tauri/jotx-gui
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -88,15 +86,6 @@ jobs:
             
             **🪟 Windows**
             - Download `.msi` installer
-            
-            ### What's New
-            See [full changelog](https://github.com/Jeffawe/Jot/releases)
-            
-            ### Installation
-            
-            **macOS**: Open the `.dmg` and drag to Applications
-            **Linux**: Make `.AppImage` executable and run, or install `.deb`
-            **Windows**: Run the `.msi` installer
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
