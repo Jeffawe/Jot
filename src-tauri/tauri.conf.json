@@ -2,11 +2,11 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "JOTX",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.jotx.app",
   "build": {
     "frontendDist": "jotx-gui/dist",
-    "beforeDevCommand": "npm run dev --prefix",
-    "beforeBuildCommand": "npm run build --prefix"
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
