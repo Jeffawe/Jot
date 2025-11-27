@@ -104,17 +104,33 @@ echo ""
 echo -e "${YELLOW}🚀 Running jotx setup...${NC}"
 echo ""
 
-# Run setup
 if "$BINARY_PATH" setup; then
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║     ✅ Installation Complete!          ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
     echo ""
+    
+    # Try to start jotx in background
+    echo -e "${YELLOW}▶️  Starting jotx daemon...${NC}"
+    if "$BINARY_PATH" run > /dev/null 2>&1 &  then
+        sleep 2  # Give it time to start
+        if "$BINARY_PATH" status > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Jotx is running in the background!${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Jotx may need manual start${NC}"
+            echo -e "Run ${GREEN}jotx run${NC} to start it"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Could not start automatically${NC}"
+        echo -e "Run ${GREEN}jotx run${NC} to start jotx"
+    fi
+    
+    echo ""
     echo -e "${BLUE}Next steps:${NC}"
     echo "  1. Restart your terminal (or run: source ~/.bashrc)"
-    echo "  2. Jotx is already running in the background!"
-    echo "  3. Try: ${GREEN}jotx status${NC}"
+    echo "  2. Check status: ${GREEN}jotx status${NC}"
+    echo "  3. Try searching: ${GREEN}jotx search 'test'${NC}"
     echo ""
 else
     echo ""
