@@ -7,6 +7,9 @@
 
 **jot** is a fully local, privacy-first AI assistant that remembers your clipboard history and terminal commands. Ask questions in natural language and get instant answers, no scrolling, no searching, just results.
 
+[![Release](https://img.shields.io/github/v/release/Jeffawe/Jot)](https://github.com/Jeffawe/Jot/releases)
+[![License](https://img.shields.io/github/license/Jeffawe/Jot)](LICENSE)
+
 ## ✨ Features
 
 - 🔍 **Natural Language Search** - Find things by meaning, not just keywords
@@ -34,17 +37,22 @@ js "yarn"
 
 ## 🚀 Quick Start
 
-### Installation
+### macOS & Linux
 
-**macOS** (Currently supported)
-
+Copy and paste this into your terminal:
 ```bash
-# Clone the repository
-git clone https://github.com/Jeffawe/Jot
-cd jot
+curl -fsSL https://raw.githubusercontent.com/Jeffawe/Jot/main/install.sh | bash
+```
 
-# Run the make command
-make setup
+That's it! The installer will:
+- ✅ Download the right binary for your system
+- ✅ Install Ollama (local AI)
+- ✅ Set up shell hooks
+- ✅ Start the daemon
+
+**Alternative with wget:**
+```bash
+wget -qO- https://raw.githubusercontent.com/Jeffawe/Jot/main/install.sh | bash
 ```
 
 ### First Run
