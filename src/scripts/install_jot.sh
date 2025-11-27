@@ -30,8 +30,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-
-
 # Determine shell config file
 if [ -n "$ZSH_VERSION" ]; then
     SHELL_RC="$HOME/.zshrc"
