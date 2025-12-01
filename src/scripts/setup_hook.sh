@@ -82,7 +82,6 @@ add_hook() {
     
     # Create backup
     cp "$rc_file" "${rc_file}.backup.$(date +%Y%m%d_%H%M%S)"
-    echo "📦 Backup created: ${rc_file}.backup.$(date +%Y%m%d_%H%M%S)"
     
     # Remove old hook if exists
     if grep -q "# JOTX_START" "$rc_file"; then
@@ -124,8 +123,3 @@ echo ""
 echo "✅ Hook setup complete!"
 echo "   Please restart your terminal or run: source $HOME/.${SHELL_NAME}rc"
 echo ""
-echo "💡 Usage:"
-echo "   - Commands are automatically captured"
-echo "   - Type 'jotx search <query>' or 'js <query>' to search and insert command"
-echo "   - Example: jotx search echo"
-echo "   - Example: js git"

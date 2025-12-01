@@ -100,7 +100,7 @@ pub fn install_llm() -> Result<(), Box<dyn std::error::Error>> {
     
     if !input.trim().eq_ignore_ascii_case("y") {
         println!("❌ Cancelled");
-        println!("   You can install later with: jotx install-llm");
+        println!("   You can install later with: jotx handle-llm");
         return Ok(());
     }
     
@@ -140,9 +140,7 @@ pub fn install_llm() -> Result<(), Box<dyn std::error::Error>> {
 // ============================================================================
 // SETUP (make setup) - Full installation
 // ============================================================================
-pub fn full_setup() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🚀 Running full jotx setup...\n");
-    
+pub fn full_setup() -> Result<(), Box<dyn std::error::Error>> {    
     // 1. Install binary (if not already)
     install()?;
     println!();
@@ -161,15 +159,7 @@ pub fn full_setup() -> Result<(), Box<dyn std::error::Error>> {
     
     let current_dir = std::env::current_dir()?;
     fs::write(jotx_dir.join("path"), current_dir.to_string_lossy().as_bytes())?;
-    
-    println!("📁 Saved repo path to ~/.jotx/path");
-    println!("   -> {}", current_dir.display());
-    println!();
-    
     println!("✅ Setup complete!");
-    println!();
-    println!("Please run: source ~/.zshrc  (or ~/.bashrc) for all terminal sessions or restart your terminal");
-    println!("Then start jotx with: jotx run");
     
     Ok(())
 }

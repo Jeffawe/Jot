@@ -54,7 +54,23 @@ BINARY_PATH="$INSTALL_DIR/$BINARY_NAME"
 
 # GitHub repository
 REPO="Jeffawe/Jot"
-DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/jotx-${OS_TYPE}-${ARCH_TYPE}"
+# Get latest CLI release tag (starts with 'v', not 'desktop-')
+echo -e "${YELLOW}🔍 Finding latest CLI release...${NC}"
+LATEST_TAG=$(curl -s "https://api.github.com/repos/${REPO}/releases" | \
+             grep '"tag_name"' | \
+             grep -v "desktop-" | \
+             head -1 | \
+             cut -d'"' -f4)
+
+if [ -z "$LATEST_TAG" ]; then
+    echo -e "${RED}❌ Could not find latest CLI release${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Found version: $LATEST_TAG${NC}"
+echo ""
+
+DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}/jotx-${OS_TYPE}-${ARCH_TYPE}"
 
 # Create installation directory
 echo -e "${YELLOW}📁 Creating installation directory...${NC}"

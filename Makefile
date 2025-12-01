@@ -33,8 +33,8 @@ help:
 
 install:
 	@echo "📦 Installing jotx..."
-	@chmod +x ./bash_commands/install_jot.sh
-	@./bash_commands/install_jot.sh
+	@chmod +x ./src/scripts/install_jot.sh
+	@./src/scripts/install_jot.sh
 
 install-llm:
 	@echo "📦 Jotx requires Ollama to work. We will install it for you!"
@@ -42,8 +42,8 @@ install-llm:
 	@read -p "Continue with installation? (y/N) " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		chmod +x ./bash_commands/install_llm.sh; \
-		if ./bash_commands/install_llm.sh; then \
+		chmod +x ./src/scripts/install_llm.sh; \
+		if ./src/scripts/install_llm.sh; then \
 			echo ""; \
 			echo "✅ LLM setup complete! You can now use: jotx ask <query>"; \
 		else \
@@ -59,8 +59,8 @@ install-llm:
 
 hooks:
 	@echo "🔗 Setting up shell hooks..."
-	@chmod +x ./bash_commands/setup_hook.sh
-	@./bash_commands/setup_hook.sh
+	@chmod +x ./src/scripts/setup_hook.sh
+	@./src/scripts/setup_hook.sh
 	@echo "Please run: source ~/.zshrc  (or ~/.bashrc) for all terminal sessions or restart your terminal"
 
 setup: install hooks install-llm

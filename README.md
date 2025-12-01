@@ -80,9 +80,6 @@ jotx ask "what was that git command from yesterday?"
 ### CLI Commands
 
 ```bash
-# Start clipboard & terminal monitoring
-jotx run
-
 # Search with natural language
 jotx ask "docker command with port mapping"
 jotx search "yarn" 

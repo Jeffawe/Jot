@@ -1,8 +1,8 @@
 use once_cell::sync::Lazy;
-use tokio::sync::Mutex;
-use std::process::Command;
 use reqwest::Client;
+use std::process::Command;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use super::{LlmModel, default::OllamaModel};
 use crate::config::{Config, GLOBAL_CONFIG, LlmConfig};
@@ -49,7 +49,7 @@ impl LlmManager {
             config,
         }
     }
-    
+
     /// Check if Ollama is installed
     pub fn is_ollama_installed(&self) -> bool {
         Command::new("which")
@@ -58,20 +58,23 @@ impl LlmManager {
             .map(|output| output.status.success())
             .unwrap_or(false)
     }
-    
+
     /// Check if Ollama service is running
     pub async fn is_ollama_running(&self) -> bool {
-        let api_base = self.config.api_base.clone()
+        let api_base = self
+            .config
+            .api_base
+            .clone()
             .unwrap_or_else(|| "http://localhost:11434".to_string());
-        
+
         Client::new()
             .get(&api_base)
             .timeout(std::time::Duration::from_secs(2))
             .send()
-             .await 
+            .await
             .is_ok()
     }
-    
+
     /// Check if the configured model exists locally
     pub fn is_model_available(&self) -> bool {
         Command::new("ollama")
@@ -84,80 +87,79 @@ impl LlmManager {
             .unwrap_or(false)
     }
 
-pub fn get_models(&self) -> Vec<String> {
-    Command::new("ollama")
-        .args(&["list"])
-        .output()
-        .map(|output| {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout
-                .lines()
-                .skip(1)  // Skip the "NAME ID SIZE MODIFIED" header
-                .filter_map(|line| {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 3 {
-                        // parts[0] = name, parts[1] = id, parts[2] = size (e.g., "986"), parts[3] = unit (e.g., "MB")
-                        let name = parts[0];
-                        let size = if parts.len() >= 4 {
-                            format!("{} {}", parts[2], parts[3])  // "986 MB"
+    pub fn get_models(&self) -> Vec<String> {
+        Command::new("ollama")
+            .args(&["list"])
+            .output()
+            .map(|output| {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                stdout
+                    .lines()
+                    .skip(1) // Skip the "NAME ID SIZE MODIFIED" header
+                    .filter_map(|line| {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 3 {
+                            // parts[0] = name, parts[1] = id, parts[2] = size (e.g., "986"), parts[3] = unit (e.g., "MB")
+                            let name = parts[0];
+                            let size = if parts.len() >= 4 {
+                                format!("{} {}", parts[2], parts[3]) // "986 MB"
+                            } else {
+                                parts[2].to_string() // Just the number if no unit
+                            };
+                            Some(format!("{} ({})", name, size))
                         } else {
-                            parts[2].to_string()  // Just the number if no unit
-                        };
-                        Some(format!("{} ({})", name, size))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or(Vec::new())
-}
-    
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or(Vec::new())
+    }
+
     /// Get or initialize the LLM model
     pub async fn get_llm(&mut self) -> Result<Arc<Box<dyn LlmModel>>, LlmError> {
         // Return existing model if already initialized
         if let Some(ref model) = self.model {
             return Ok(Arc::clone(model));
         }
-        
+
         // Check if Ollama is installed
         if !self.is_ollama_installed() {
             return Err(LlmError::OllamaNotInstalled);
         }
-        
+
         // Check if Ollama is running
         if !self.is_ollama_running().await {
             // Try to start Ollama
-            let _ = Command::new("ollama")
-                .arg("serve")
-                .spawn();
-            
+            let _ = Command::new("ollama").arg("serve").spawn();
+
             // Wait a bit for it to start
             std::thread::sleep(std::time::Duration::from_secs(2));
-            
+
             if !self.is_ollama_running().await {
                 return Err(LlmError::OllamaNotRunning);
             }
         }
-        
+
         // Check if model is available
         if !self.is_model_available() {
             return Err(LlmError::ModelNotFound(self.config.model.clone()));
         }
-        
+
         // Initialize the model
-        let api_base = self.config.api_base.clone()
+        let api_base = self
+            .config
+            .api_base
+            .clone()
             .unwrap_or_else(|| "http://localhost:11434".to_string());
-        
-        let model: Box<dyn LlmModel> = Box::new(OllamaModel::new(
-            api_base,
-            self.config.model.clone(),
-        ));
-        
+
+        let model: Box<dyn LlmModel> =
+            Box::new(OllamaModel::new(api_base, self.config.model.clone()));
+
         self.model = Some(Arc::new(model));
         Ok(Arc::clone(self.model.as_ref().unwrap()))
     }
-    
+
     /// Interpret a natural language query into search parameters
     pub async fn interpret_query(
         &mut self,
@@ -165,28 +167,28 @@ pub fn get_models(&self) -> Vec<String> {
         directory: &str,
     ) -> Result<super::LLMQueryParams, Box<dyn std::error::Error>> {
         let model = self.get_llm().await?;
-        model.interpret_query(
-            query,
-            directory,
-            self.config.max_tokens,
-            self.config.temperature,
-        ).await
+        model
+            .interpret_query(
+                query,
+                directory,
+                self.config.max_tokens,
+                self.config.temperature,
+            )
+            .await
     }
-    
+
     /// Answer a knowledge question directly
     pub async fn answer_question(
         &mut self,
         query: &str,
     ) -> Result<String, Box<dyn std::error::Error>> {
         let model = self.get_llm().await?;
-        
-        model.answer_question(
-            query,
-            self.config.max_tokens,
-            self.config.temperature,
-        ).await
+
+        model
+            .answer_question(query, self.config.max_tokens, self.config.temperature)
+            .await
     }
-    
+
     /// Get the current model name
     #[allow(dead_code)]
     pub fn model_name(&self) -> &str {
@@ -194,5 +196,4 @@ pub fn get_models(&self) -> Vec<String> {
     }
 }
 
-pub static GLOBAL_LLM: Lazy<Mutex<LlmManager>> =
-    Lazy::new(|| Mutex::new(LlmManager::new()));
+pub static GLOBAL_LLM: Lazy<Mutex<LlmManager>> = Lazy::new(|| Mutex::new(LlmManager::new()));
