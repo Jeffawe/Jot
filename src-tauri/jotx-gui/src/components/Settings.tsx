@@ -13,7 +13,7 @@ interface AppSettings {
     shell_limit: number;
 }
 
-export default function Settings() {
+export default function Settings({ check_setup_status }: { check_setup_status: boolean }) {
     const [settings, setSettings] = useState<AppSettings>({
         capture_clipboard: true,
         capture_shell: true,
@@ -62,6 +62,42 @@ export default function Settings() {
             setTimeout(() => setSaveMessage(null), 2000);
         }
     };
+
+    const setup_hooks = async () => {
+        try {
+            await invoke('setup_hooks_gui');
+            setSaveMessage('Shell hooks installed! Please restart your terminal.');
+            setTimeout(() => setSaveMessage(null), 3000);
+        } catch (error) {
+            setSaveMessage(`Failed to setup hooks: ${error}`);
+            setTimeout(() => setSaveMessage(null), 3000);
+        }
+    };
+
+    const uninstall = async () => {
+        const confirmed = window.confirm(
+            '⚠️ This will completely uninstall Jotx!\n\n' +
+            'This action will:\n' +
+            '• Remove all stored data\n' +
+            '• Remove shell hooks\n' +
+            '• Delete the Jotx binary\n\n' +
+            'Are you sure you want to continue?'
+        );
+
+        if (!confirmed) return;
+
+        try {
+            await invoke('uninstall_jotx');
+            setSaveMessage('Jotx uninstalled. The app will now close.');
+            setTimeout(() => {
+                // Close the app
+                window.close();
+            }, 2000);
+        } catch (error) {
+            setSaveMessage(`Failed to uninstall: ${error}`);
+            setTimeout(() => setSaveMessage(null), 3000);
+        }
+    }
 
     const toggleSetting = (key: keyof AppSettings) => {
         const updated = { ...settings, [key]: !settings[key] };
@@ -267,6 +303,47 @@ export default function Settings() {
                                     <span className="edit-hint">Click to edit</span>
                                 </div>
                             )}
+                        </div>
+
+                        <div className="settings-divider"></div>
+
+                        {check_setup_status && (
+                            <>
+                                <h3>Shell Integration</h3>
+
+                                <div className="setting-item shell-hooks-section">
+                                    <div className="setting-info">
+                                        <label>Shell Hooks</label>
+                                        <p className="setting-description">
+                                            Set up shell hooks to enable clipboard and command history monitoring
+                                        </p>
+                                    </div>
+                                    <button
+                                        className="setup-hooks-button"
+                                        onClick={setup_hooks}
+                                    >
+                                        <span className="button-icon">🔗</span>
+                                        Setup Shell Hooks
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        <h3>Uninstall Jotx</h3>
+                        <div className="setting-item shell-hooks-section">
+                            <div className="setting-info">
+                                <label>Uninstall Jotx</label>
+                                <p className="setting-description">
+                                    Remove Jotx completely, including all data, shell hooks, and binaries
+                                </p>
+                            </div>
+                            <button
+                                className="uninstall-button"
+                                onClick={uninstall}
+                            >
+                                <span className="button-icon">🗑️</span>
+                                Uninstall Jotx
+                            </button>
                         </div>
                     </div>
                 )}

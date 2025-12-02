@@ -1,4 +1,5 @@
 mod commands;
+mod setup;
 
 fn main() {
     tauri::Builder::default()
@@ -14,7 +15,11 @@ fn main() {
             commands::remove_model,
             commands::install_ollama,
             commands::start_ollama,
-            commands::get_all_paths
+            commands::get_all_paths,
+            setup::run_setup,
+            setup::check_setup_status,
+            setup::setup_hooks_gui,
+            setup::uninstall_jotx
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

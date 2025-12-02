@@ -1,0 +1,270 @@
+.setup-container {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40px;
+}
+
+.setup-card {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  max-width: 500px;
+  width: 100%;
+}
+
+.setup-card h1 {
+  color: #667eea;
+  margin-bottom: 10px;
+  font-size: 28px;
+}
+
+.subtitle {
+  color: #666;
+  margin-bottom: 30px;
+  font-size: 14px;
+}
+
+.requirements {
+  background: #f7fafc;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.requirements h3 {
+  color: #2d3748;
+  margin-bottom: 15px;
+  font-size: 16px;
+}
+
+.requirements ul {
+  list-style: none;
+  padding: 0;
+}
+
+.requirements li {
+  padding: 8px 0;
+  color: #4a5568;
+  font-size: 14px;
+}
+
+.requirements li:before {
+  content: "✓ ";
+  color: #48bb78;
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.buttons button {
+  flex: 1;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #5568d3;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.btn-secondary:hover {
+  background: #cbd5e0;
+}
+
+.progress {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.spinner {
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #667eea;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 20px auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.status-text {
+  color: #4a5568;
+  font-size: 14px;
+}
+
+.error {
+  background: #fed7d7;
+  color: #c53030;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-icon {
+  font-size: 48px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.modal h2 {
+  color: #2d3748;
+  text-align: center;
+  margin-bottom: 16px;
+  font-size: 24px;
+}
+
+.modal-text {
+  color: #4a5568;
+  text-align: center;
+  margin-bottom: 16px;
+  font-size: 15px;
+}
+
+.warning-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+  background: #fff5f5;
+  border-left: 4px solid #fc8181;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.warning-list li {
+  color: #c53030;
+  padding: 6px 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.modal-note {
+  color: #4a5568;
+  text-align: center;
+  margin: 20px 0 12px 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.info-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 24px 0;
+  background: #f0f4ff;
+  border-left: 4px solid #667eea;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.info-list li {
+  color: #4a5568;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.info-list strong {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.modal-buttons button {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-warning {
+  background: #fc8181;
+  color: white;
+}
+
+.btn-warning:hover {
+  background: #f56565;
+  transform: translateY(-1px);
+}
+
+.btn-secondary:hover {
+  transform: translateY(-1px);
+}
