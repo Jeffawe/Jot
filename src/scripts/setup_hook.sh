@@ -120,6 +120,5 @@ case "$SHELL_NAME" in
 esac
 
 echo ""
-echo "✅ Hook setup complete!"
-echo "   Please restart your terminal or run: source $HOME/.${SHELL_NAME}rc"
+echo -e "${GREEN}✅ Hook added to $SHELL_NAME!${NC}"
 echo ""

@@ -23,6 +23,11 @@ pub fn install() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&install_dir)?;
     
     let target = install_dir.join("jotx");
+
+    if current_exe.canonicalize()? == target.canonicalize().unwrap_or_default() {
+        println!("✅ Already installed at: {}", target.display());
+        return Ok(());
+    }
     
     // Copy binary to install location
     fs::copy(&current_exe, &target)?;
