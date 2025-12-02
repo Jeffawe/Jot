@@ -2,6 +2,7 @@ use std::time::SystemTime;
 
 use crate::commands::get_working_directory;
 use crate::db::USER_DB;
+use crate::embeds::EMBEDDING_MODEL;
 use crate::llm::{GLOBAL_LLM, LLMQueryParams};
 use crate::types::GUISearchResult;
 
@@ -30,18 +31,14 @@ pub async fn ask(
 
     let intent = classify_intent(query);
 
+    // Initialize LLM early - we'll need it regardless
     let mut llm_daemon = GLOBAL_LLM.lock().await;
-
-    match llm_daemon.get_llm().await {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(format!(
-                "LLM initialization failed: {}. Use jotx handle-llm to fix",
-                e
-            )
-            .into());
-        }
-    };
+    llm_daemon.get_llm().await.map_err(|e| {
+        format!(
+            "LLM initialization failed: {}. Use jotx handle-llm to fix",
+            e
+        )
+    })?;
 
     match intent {
         Intent::Knowledge => {
@@ -51,63 +48,117 @@ pub async fn ask(
         }
 
         Intent::Retrieval => {
-            // Three-tier cache system
+            // Tier 1: Single word -> direct search (no LLM needed)
             let word_count = query.split_whitespace().count();
-
             if word_count <= 1 {
                 let result = search(query, directory, print_only);
-
                 return Ok(AskResponse::SearchResults(result));
             }
 
-            // Tier 2: Fingerprint cache
-            let fingerprint = QueryFingerprint::from_query(query);
+            // Tier 2: Try fingerprint cache
+            let cached_params = try_cache_lookup(query).unwrap_or(None);
 
-            let cached_params = {
-                let mut db = match USER_DB.lock() {
-                    Ok(db) => db,
-                    Err(e) => return Err(format!("DB lock failed: {}", e).into()),
-                };
-
-                if let Some(params) = db.cache.find_match(&fingerprint, 0.80) {
-                    db.cache.record_hit(query)?;
-                    Some(params)
-                } else {
-                    None
-                }
-            };
-
-            // 2. Handle Cache Hit
             if let Some(params) = cached_params {
+                if !print_only {
+                    println!("✓ Cache hit");
+                }
                 let results = execute_search(&params, query, print_only)?;
                 return Ok(AskResponse::SearchResults(results));
             }
 
+            // Tier 3: LLM fallback (cache miss)
             if !print_only {
-                println!("Querying LLM for search parameters...");
+                println!("✗ Cache miss - querying LLM...");
             }
 
-            // Tier 3: LLM fallback
             let params = llm_daemon.interpret_query(query, directory).await?;
 
             if test {
                 println!("LLM Query Params: {:?}", params);
             }
 
-            {
-                let mut db = match USER_DB.lock() {
-                    Ok(db) => db,
-                    Err(e) => return Err(format!("DB lock failed: {}", e).into()),
-                };
-
-                // Cache for next time
-                db.cache.insert(query, fingerprint, params.clone())?;
+            // Cache the result for next time
+            if let Err(e) = cache_query_params(query, &params) {
+                if test {
+                    println!("Failed to cache query params: {}", e);
+                }
             }
 
             let results = execute_search(&params, query, print_only)?;
             Ok(AskResponse::SearchResults(results))
         }
     }
+}
+
+/// Try to find cached params for this query
+fn try_cache_lookup(query: &str) -> Result<Option<LLMQueryParams>, Box<dyn std::error::Error>> {
+    // Try to get embedding (non-blocking)
+    let embed_lock = EMBEDDING_MODEL.try_lock();
+    if embed_lock.is_err() {
+        // Embedding service busy, skip cache
+        return Ok(None);
+    }
+
+    let mut embed = embed_lock.unwrap();
+    let query_embedding = match embed.embed(query) {
+        Ok(embedding) => embedding,
+        Err(_) => {
+            // Embedding failed, skip cache
+            return Ok(None);
+        }
+    };
+
+    // Create fingerprint
+    let fingerprint = QueryFingerprint::new(query, query_embedding);
+
+    // Search cache
+    let mut db = USER_DB
+        .lock()
+        .map_err(|e| format!("DB lock failed: {}", e))?;
+
+    db.cache.warm_up_cache()?;
+
+    if let Some(params) = db.cache.find_match(&fingerprint, 0.80) {
+        // Record hit (this updates hit_count and last_used)
+        db.cache.update_hit_count(query)?;
+        Ok(Some(params))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Cache query and its LLM-generated params
+fn cache_query_params(
+    query: &str,
+    params: &LLMQueryParams,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Try to get embedding (non-blocking)
+    let embed_lock = EMBEDDING_MODEL.try_lock();
+    if embed_lock.is_err() {
+        // Embedding service busy, skip caching
+        return Ok(());
+    }
+
+    let mut embed = embed_lock.unwrap();
+    let query_embedding = match embed.embed(query) {
+        Ok(embedding) => embedding,
+        Err(_) => {
+            // Embedding failed, skip caching
+            return Ok(());
+        }
+    };
+
+    // Create fingerprint (you might want to extract keywords here too)
+    let fingerprint = QueryFingerprint::new(query, query_embedding);
+
+    // Insert into cache
+    let mut db = USER_DB
+        .lock()
+        .map_err(|e| format!("DB lock failed: {}", e))?;
+
+    db.cache.insert(fingerprint, params.clone())?;
+
+    Ok(())
 }
 
 fn execute_search(
@@ -185,22 +236,7 @@ pub async fn ask_gui(
                 return Ok(result);
             }
 
-            // Tier 2: Fingerprint cache
-            let fingerprint = QueryFingerprint::from_query(query);
-
-            let cached_params = {
-                let mut db = match USER_DB.lock() {
-                    Ok(db) => db,
-                    Err(e) => return Err(format!("DB lock failed: {}", e).into()),
-                };
-
-                if let Some(params) = db.cache.find_match(&fingerprint, 0.80) {
-                    db.cache.record_hit(query)?;
-                    Some(params)
-                } else {
-                    None
-                }
-            };
+            let cached_params = try_cache_lookup(query).unwrap_or(None);
 
             // 2. Handle Cache Hit
             if let Some(params) = cached_params {
@@ -211,15 +247,8 @@ pub async fn ask_gui(
             // Tier 3: LLM fallback
             let params = llm_daemon.interpret_query(query, directory).await?;
 
-            {
-                let mut db = match USER_DB.lock() {
-                    Ok(db) => db,
-                    Err(e) => return Err(format!("DB lock failed: {}", e).into()),
-                };
-
-                // Cache for next time
-                db.cache.insert(query, fingerprint, params.clone())?;
-            }
+            // Cache the result for next time
+            let _ = cache_query_params(query, &params);
 
             let results = execute_search_gui(&params)?;
             Ok(results)
@@ -278,7 +307,7 @@ mod tests {
             "source used",
             "/Users/somua/Documents/Projects/ClipboardAI/jot-cli",
             false,
-            true
+            true,
         )
         .await
         .unwrap();

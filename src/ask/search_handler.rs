@@ -7,7 +7,7 @@ use crate::config::GLOBAL_CONFIG;
 use crate::db::USER_DB;
 use crate::llm::{LLMQueryParams, SimpleTimeRange};
 use crate::plugin::GLOBAL_PLUGIN_MANAGER;
-use crate::types::{GUISearchResult, SearchResult};
+use crate::types::{EntryType, GUISearchResult, SearchResult};
 
 const MAX_RESULTS: usize = 10;
 
@@ -25,7 +25,7 @@ pub fn search(query: &str, directory: &str, print_only: bool) -> Option<String> 
     }
 
     // Try keyword search first
-    match keyword_search(query, directory) {
+    match keyword_search(query, EntryType::Shell, directory) {
         Ok(results) if !results.is_empty() => {
             return display_results_interactive(
                 query,
@@ -53,7 +53,7 @@ pub fn search_gui(
     }
 
     // Try keyword search first
-    match keyword_search(query, directory) {
+    match keyword_search(query, EntryType::Shell, directory) {
         Ok(results) if !results.is_empty() => Ok(results
             .into_iter()
             .map(|r| GUISearchResult {
@@ -71,6 +71,7 @@ pub fn search_gui(
 // Keyword search using SQLite FTS5
 pub fn keyword_search(
     query: &str,
+    entry_type: EntryType,
     directory: &str,
 ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
     let db = USER_DB
@@ -86,6 +87,8 @@ pub fn keyword_search(
 
     let mut results: Vec<SearchResult>;
 
+    let entry_type_str = entry_type.to_string().to_lowercase();
+
     if use_fts {
         // --- EXISTING FTS LOGIC ---
         let fts_query = format!("{}*", query);
@@ -99,13 +102,13 @@ pub fn keyword_search(
                     END as pwd_boost
              FROM entries_fts 
              JOIN entries e ON entries_fts.rowid = e.id
-             WHERE entries_fts MATCH ?1
+             WHERE entries_fts MATCH ?1 AND e.entry_type = ?3
              ORDER BY pwd_boost DESC, e.times_run DESC, e.timestamp DESC
              LIMIT 50",
         )?;
 
         results = stmt
-            .query_map(rusqlite::params![&fts_query, directory], |row| {
+            .query_map(rusqlite::params![&fts_query, directory, entry_type_str], |row| {
                 Ok(SearchResult {
                     id: row.get(0)?,
                     entry_type: row.get(1)?,
@@ -132,13 +135,13 @@ pub fn keyword_search(
                         ELSE 0.0
                     END as pwd_boost
              FROM entries e
-             WHERE e.content LIKE ?1
+             WHERE e.content LIKE ?1 AND e.entry_type = ?3
              ORDER BY pwd_boost DESC, e.times_run DESC, e.timestamp DESC
              LIMIT 50",
         )?;
 
         results = stmt
-            .query_map(rusqlite::params![&like_query, directory], |row| {
+            .query_map(rusqlite::params![&like_query, directory, entry_type_str], |row| {
                 Ok(SearchResult {
                     id: row.get(0)?,
                     entry_type: row.get(1)?,
