@@ -29,7 +29,7 @@ else
         echo "  Detected: macOS"
         # Check if Homebrew is available
         if command -v brew &> /dev/null; then
-            brew install ollama
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ollama
         else
             curl -fsSL https://ollama.com/install.sh | sh
         fi
@@ -57,14 +57,14 @@ else
         if systemctl is-active --quiet ollama 2>/dev/null; then
             # Create systemd override to silence Ollama's GIN debug logs
             OVERRIDE_FILE="/etc/systemd/system/ollama.service.d/local.conf"
-            sudo mkdir -p "$(dirname "$OVERRIDE_FILE")"
+            sudo mkdir -p "$(dirname "$OVERRIDE_FILE")" 2>/dev/null || true
             
             if ! grep -q "GIN_MODE" "$OVERRIDE_FILE" 2>/dev/null; then
-                echo -e "[Service]\nEnvironment=\"GIN_MODE=release\"" | sudo tee "$OVERRIDE_FILE" > /dev/null
-                sudo systemctl daemon-reload
+                echo -e "[Service]\nEnvironment=\"GIN_MODE=release\"" | sudo tee "$OVERRIDE_FILE" > /dev/null 2>&1 || true
+                sudo systemctl daemon-reload 2>/dev/null || true
             fi
             
-            sudo systemctl start ollama
+            sudo systemctl start ollama 2>/dev/null || GIN_MODE=release nohup ollama serve > /dev/null 2>&1 &
         else
             # Run without systemd, with GIN_MODE set
             GIN_MODE=release nohup ollama serve > /dev/null 2>&1 &
@@ -92,18 +92,18 @@ DEFAULT_MODEL="qwen2.5:1.5b"
 
 echo -e "${YELLOW}→ Checking for model: ${DEFAULT_MODEL}${NC}"
 
-if ollama list | grep -q "$DEFAULT_MODEL"; then
+if ollama list 2>/dev/null | grep -q "$DEFAULT_MODEL"; then
     echo -e "${GREEN}✓ Model ${DEFAULT_MODEL} already installed${NC}"
 else
-    echo -e "${YELLOW}→ Downloading model: ${DEFAULT_MODEL} (~300MB)${NC}"
+    echo -e "${YELLOW}→ Downloading model: ${DEFAULT_MODEL} (~900MB)${NC}"
     echo "  This may take a few minutes..."
     
-    ollama pull "$DEFAULT_MODEL"
-    
-    if [ $? -eq 0 ]; then
+    # Pull model with progress
+    if ollama pull "$DEFAULT_MODEL"; then
         echo -e "${GREEN}✓ Model ${DEFAULT_MODEL} downloaded successfully${NC}"
     else
         echo -e "${RED}✗ Failed to download model${NC}"
+        echo "  Try running manually: ollama pull $DEFAULT_MODEL"
         exit 1
     fi
 fi

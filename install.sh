@@ -194,7 +194,7 @@ if "$BINARY_PATH" setup; then
     echo ""
     echo -e "${BLUE}Next steps:${NC}"
     echo -e "  1. Restart your terminal (or run: ${CYAN}source ~/.bashrc${NC})"
-    echo -e "  2. Check status: ${GREEN}jotx status${NC}"
+    echo -e "  2. Check status: ${GREEN}jotx status${NC} (if not running use ${GREEN}jotx run${NC})"
     echo -e "  3. Try searching: ${GREEN}jotx search 'test'${NC}"
     echo ""
 else

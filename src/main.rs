@@ -154,12 +154,12 @@ async fn main() {
             }
         }
         Commands::InstallLLM => {
-            if let Err(e) = install_llm() {
+            if let Err(e) = install_llm(false) {
                 eprintln!("Error installing llm: {}", e);
             }
         }
         Commands::Setup => {
-            if let Err(e) = full_setup() {
+            if let Err(e) = full_setup(false, false) {
                 eprintln!("Error setting up: {}", e);
             }
         }

@@ -1,13 +1,6 @@
 #!/bin/bash
 set -e  # Exit on error
 
-# Check if jotx is installed
-if ! command -v jotx &> /dev/null; then
-    echo "❌ jotx is not installed or not in PATH"
-    echo "   Please run ./install.sh first"
-    exit 1
-fi
-
 # Detect shell
 SHELL_NAME=$(basename "$SHELL")
 
@@ -120,5 +113,4 @@ case "$SHELL_NAME" in
 esac
 
 echo ""
-echo -e "${GREEN}✅ Hook added to $SHELL_NAME!${NC}"
 echo ""
