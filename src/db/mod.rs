@@ -5,7 +5,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
+
 mod cache;
+mod sample_generator;
+
+pub use sample_generator::SampleSelector;
+
 use cache::FingerprintCache;
 
 use crate::types::EntryType;
@@ -63,6 +68,21 @@ impl Database {
     }
 
     fn init_schema(&self) -> Result<()> {
+        unsafe {
+            self.conn.load_extension_enable()?;
+            // Try to load vec0 extension - handle gracefully if not available
+            match self.conn.load_extension("vec0", None::<&str>) {
+                Ok(_) => println!("✓ sqlite-vec extension loaded"),
+                Err(e) => {
+                    eprintln!(
+                        "⚠ sqlite-vec not available: {}. Vector search will be disabled.",
+                        e
+                    );
+                    eprintln!("  Install from: https://github.com/asg017/sqlite-vec");
+                }
+            }
+        }
+
         // Main entries table
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS entries (
@@ -81,6 +101,7 @@ impl Database {
                 app_name TEXT,
                 window_title TEXT,
                 
+                quality_score INTEGER DEFAULT 0,
                 embedding BLOB,
                 
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
@@ -114,6 +135,56 @@ impl Database {
             "CREATE INDEX IF NOT EXISTS idx_content ON entries(content)",
             [],
         )?;
+
+        match self.conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(
+            entry_id INTEGER PRIMARY KEY,
+            embedding FLOAT[384]
+        )",
+            [],
+        ) {
+            Ok(_) => {
+                println!("✓ Vector search table created");
+
+                // Optional: Create triggers to keep vec_entries in sync with entries
+                self.conn.execute(
+                    "CREATE TRIGGER IF NOT EXISTS vec_entries_ai 
+                 AFTER INSERT ON entries 
+                 WHEN new.embedding IS NOT NULL
+                 BEGIN
+                    INSERT INTO vec_entries(entry_id, embedding)
+                    VALUES (new.id, new.embedding);
+                 END",
+                    [],
+                )?;
+
+                self.conn.execute(
+                    "CREATE TRIGGER IF NOT EXISTS vec_entries_au 
+                 AFTER UPDATE ON entries 
+                 WHEN new.embedding IS NOT NULL
+                 BEGIN
+                    INSERT OR REPLACE INTO vec_entries(entry_id, embedding)
+                    VALUES (new.id, new.embedding);
+                 END",
+                    [],
+                )?;
+
+                self.conn.execute(
+                    "CREATE TRIGGER IF NOT EXISTS vec_entries_ad 
+                 AFTER DELETE ON entries 
+                 BEGIN
+                    DELETE FROM vec_entries WHERE entry_id = old.id;
+                 END",
+                    [],
+                )?;
+            }
+            Err(e) => {
+                eprintln!(
+                    "⚠ Could not create vector table: {}. Using fallback search.",
+                    e
+                );
+            }
+        }
 
         // FTS5 table
         self.conn.execute(
@@ -650,4 +721,18 @@ pub static SHELL_DB: Lazy<Mutex<Database>> =
 pub fn get_db_path() -> PathBuf {
     let home = std::env::var("HOME").expect("HOME not set");
     PathBuf::from(home).join(".jotx").join("jotx.db")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_db() {
+        let db = Database::new().unwrap();
+        match db.init_schema() {
+            Ok(_) => println!("Schema initialized"),
+            Err(e) => println!("Failed to initialize schema: {}", e),
+        }
+    }
 }

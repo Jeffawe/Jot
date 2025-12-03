@@ -118,7 +118,7 @@ fn try_cache_lookup(query: &str) -> Result<Option<LLMQueryParams>, Box<dyn std::
 
     db.cache.warm_up_cache()?;
 
-    if let Some(params) = db.cache.find_match(&fingerprint, 0.80) {
+    if let Some(params) = db.cache.find_match(&fingerprint, 0.90) {
         // Record hit (this updates hit_count and last_used)
         db.cache.update_hit_count(query)?;
         Ok(Some(params))
