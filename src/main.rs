@@ -46,10 +46,10 @@ async fn main() {
 
     match cli.command {
         Commands::Run => start_service(),
-        Commands::Ask { query, print_only } => {
+        Commands::Ask { query, clipboard, print_only } => {
             let pwd = get_working_directory();
 
-            let ask_result = ask(&query, &pwd, print_only, false).await;
+            let ask_result = ask(&query, clipboard, &pwd, print_only, false).await;
             match ask_result {
                 Ok(value) => {
                     if let Some(result) = ask_to_string(value) {
@@ -67,12 +67,12 @@ async fn main() {
             }
         }
         Commands::Cleanup => maintain(),
-        Commands::Search { query, print_only } => {
+        Commands::Search { query, clipboard, print_only } => {
             let pwd = std::env::current_dir()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|_| String::from(""));
 
-            if let Some(result) = search(&query, &pwd, print_only) {
+            if let Some(result) = search(&query, clipboard, &pwd, print_only) {
                 if print_only {
                     print!("{}", result);
                 }
@@ -192,7 +192,7 @@ fn start_service() {
         // Force terminal cleanup
         let _ = crossterm::terminal::disable_raw_mode();
         let _ = crossterm::execute!(std::io::stderr(), crossterm::cursor::Show);
-        std::process::exit(130);
+        std::process::exit(0);
     })
     .expect("Error setting Ctrl+C handler");
 

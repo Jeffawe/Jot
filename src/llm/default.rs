@@ -235,7 +235,6 @@ mod tests {
         match result {
             Ok(params) => {
                 println!("Keywords: {:?}", params.keywords);
-                println!("Entry types: {:?}", params.entry_types);
                 println!("Time range: {:?}", params.time_range);
             }
             Err(e) => println!("Error: {}", e),

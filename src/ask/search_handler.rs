@@ -11,7 +11,12 @@ use crate::types::{EntryType, GUISearchResult, SearchResult};
 
 const MAX_RESULTS: usize = 10;
 
-pub fn search(query: &str, directory: &str, print_only: bool) -> Option<String> {
+pub fn search(
+    query: &str,
+    search_clipboard: bool,
+    directory: &str,
+    print_only: bool,
+) -> Option<String> {
     if query.is_empty() {
         if !print_only {
             println!("No query provided. Use jotx search <query>");
@@ -24,8 +29,14 @@ pub fn search(query: &str, directory: &str, print_only: bool) -> Option<String> 
         println!("🔍 Searching for: {}\n", query);
     }
 
+    let entry_type = if search_clipboard {
+        EntryType::Clipboard
+    } else {
+        EntryType::Shell
+    };
+
     // Try keyword search first
-    match keyword_search(query, EntryType::Shell, directory) {
+    match keyword_search(query, entry_type, directory) {
         Ok(results) if !results.is_empty() => {
             return display_results_interactive(
                 query,
@@ -53,7 +64,7 @@ pub fn search_gui(
     }
 
     // Try keyword search first
-    match keyword_search(query, EntryType::Shell, directory) {
+    match keyword_search(query, EntryType::Clipboard, directory) {
         Ok(results) if !results.is_empty() => Ok(results
             .into_iter()
             .map(|r| GUISearchResult {
@@ -108,20 +119,23 @@ pub fn keyword_search(
         )?;
 
         results = stmt
-            .query_map(rusqlite::params![&fts_query, directory, entry_type_str], |row| {
-                Ok(SearchResult {
-                    id: row.get(0)?,
-                    entry_type: row.get(1)?,
-                    content: row.get(2)?,
-                    timestamp: row.get(3)?,
-                    times_run: row.get(4)?,
-                    working_dir: row.get(5)?,
-                    host: row.get(6)?,
-                    app_name: row.get(7)?,
-                    window_title: row.get(8)?,
-                    similarity: row.get::<_, f32>(9)?,
-                })
-            })?
+            .query_map(
+                rusqlite::params![&fts_query, directory, entry_type_str],
+                |row| {
+                    Ok(SearchResult {
+                        id: row.get(0)?,
+                        entry_type: row.get(1)?,
+                        content: row.get(2)?,
+                        timestamp: row.get(3)?,
+                        times_run: row.get(4)?,
+                        working_dir: row.get(5)?,
+                        host: row.get(6)?,
+                        app_name: row.get(7)?,
+                        window_title: row.get(8)?,
+                        similarity: row.get::<_, f32>(9)?,
+                    })
+                },
+            )?
             .collect::<Result<Vec<_>, _>>()?;
     } else {
         // --- FALLBACK LIKE LOGIC (For 1-2 char queries) ---
@@ -141,20 +155,23 @@ pub fn keyword_search(
         )?;
 
         results = stmt
-            .query_map(rusqlite::params![&like_query, directory, entry_type_str], |row| {
-                Ok(SearchResult {
-                    id: row.get(0)?,
-                    entry_type: row.get(1)?,
-                    content: row.get(2)?,
-                    timestamp: row.get(3)?,
-                    times_run: row.get(4)?,
-                    working_dir: row.get(5)?,
-                    host: row.get(6)?,
-                    app_name: row.get(7)?,
-                    window_title: row.get(8)?,
-                    similarity: row.get::<_, f32>(9)?,
-                })
-            })?
+            .query_map(
+                rusqlite::params![&like_query, directory, entry_type_str],
+                |row| {
+                    Ok(SearchResult {
+                        id: row.get(0)?,
+                        entry_type: row.get(1)?,
+                        content: row.get(2)?,
+                        timestamp: row.get(3)?,
+                        times_run: row.get(4)?,
+                        working_dir: row.get(5)?,
+                        host: row.get(6)?,
+                        app_name: row.get(7)?,
+                        window_title: row.get(8)?,
+                        similarity: row.get::<_, f32>(9)?,
+                    })
+                },
+            )?
             .collect::<Result<Vec<_>, _>>()?;
     }
 
@@ -321,6 +338,7 @@ fn trigger_plugins(query: &str, results: &[SearchResult]) {
 /// Keyword search using LLM-extracted parameters
 pub fn keyword_search_with_params(
     params: &LLMQueryParams,
+    entry_type: EntryType,
     directory: &str,
 ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
     let db = USER_DB
@@ -346,12 +364,10 @@ pub fn keyword_search_with_params(
     let mut param_index = 2;
 
     // Entry type filter
-    if let Some(ref types) = params.entry_types {
-        if !types.is_empty() && types != "null" {
-            where_clauses.push(format!("e.entry_type = ?{}", param_index));
-            bind_params.push(Box::new(types.clone()));
-            param_index += 1;
-        }
+    if entry_type != EntryType::Any {
+        where_clauses.push(format!("entry_type = ?{}", param_index));
+        bind_params.push(Box::new(entry_type.to_string()));
+        param_index += 1;
     }
 
     // Time range filter

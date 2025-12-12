@@ -4,7 +4,7 @@ use crate::commands::get_working_directory;
 use crate::db::USER_DB;
 use crate::embeds::EMBEDDING_MODEL;
 use crate::llm::{GLOBAL_LLM, LLMQueryParams};
-use crate::types::GUISearchResult;
+use crate::types::{EntryType, GUISearchResult};
 
 use super::fingerprint::QueryFingerprint;
 use super::intent::{Intent, classify_intent};
@@ -21,6 +21,7 @@ pub enum AskResponse {
 
 pub async fn ask(
     query: &str,
+    search_clipboard: bool,
     directory: &str,
     print_only: bool,
     test: bool,
@@ -28,6 +29,12 @@ pub async fn ask(
     if query.trim().is_empty() {
         return Err("Query cannot be empty".into());
     }
+
+    let entry_type = if search_clipboard {
+        EntryType::Clipboard
+    } else {
+        EntryType::Shell
+    };
 
     let intent = classify_intent(query);
 
@@ -51,7 +58,7 @@ pub async fn ask(
             // Tier 1: Single word -> direct search (no LLM needed)
             let word_count = query.split_whitespace().count();
             if word_count <= 1 {
-                let result = search(query, directory, print_only);
+                let result = search(query, search_clipboard, directory, print_only);
                 return Ok(AskResponse::SearchResults(result));
             }
 
@@ -62,7 +69,7 @@ pub async fn ask(
                 if !print_only {
                     println!("✓ Cache hit");
                 }
-                let results = execute_search(&params, query, print_only)?;
+                let results = execute_search(&params, entry_type, query, print_only)?;
                 return Ok(AskResponse::SearchResults(results));
             }
 
@@ -71,7 +78,13 @@ pub async fn ask(
                 println!("✗ Cache miss - querying LLM...");
             }
 
-            let params = llm_daemon.interpret_query(query, directory).await?;
+            let mut params = llm_daemon.interpret_query(query, directory).await?;
+
+            if entry_type == EntryType::Clipboard {
+                params.use_semantic = true;
+            }else{
+                params.use_semantic = false;
+            }
 
             if test || !print_only {
                 println!("LLM Query Params: {:?}", params);
@@ -84,7 +97,7 @@ pub async fn ask(
                 }
             }
 
-            let results = execute_search(&params, query, print_only)?;
+            let results = execute_search(&params, entry_type, query, print_only)?;
             Ok(AskResponse::SearchResults(results))
         }
     }
@@ -163,6 +176,7 @@ fn cache_query_params(
 
 fn execute_search(
     params: &LLMQueryParams,
+    entry_type: EntryType,
     query: &str,
     print_only: bool,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
@@ -172,7 +186,7 @@ fn execute_search(
         let result = semantic_search(&query_text);
         result?
     } else {
-        match keyword_search_with_params(params, &directory) {
+        match keyword_search_with_params(params, entry_type, &directory) {
             Ok(res) => res,
             Err(e) => {
                 return Err(format!("Search failed: {}", e).into());
@@ -240,7 +254,7 @@ pub async fn ask_gui(
 
             // 2. Handle Cache Hit
             if let Some(params) = cached_params {
-                let results = execute_search_gui(&params)?;
+                let results = execute_search_gui(&params, EntryType::Any)?;
                 return Ok(results);
             }
 
@@ -250,7 +264,7 @@ pub async fn ask_gui(
             // Cache the result for next time
             let _ = cache_query_params(query, &params);
 
-            let results = execute_search_gui(&params)?;
+            let results = execute_search_gui(&params, EntryType::Any)?;
             Ok(results)
         }
     }
@@ -258,6 +272,7 @@ pub async fn ask_gui(
 
 pub fn execute_search_gui(
     params: &LLMQueryParams,
+    entry_type: EntryType,
 ) -> Result<Vec<GUISearchResult>, Box<dyn std::error::Error>> {
     let directory = get_working_directory();
     let results = if params.use_semantic {
@@ -265,7 +280,7 @@ pub fn execute_search_gui(
         let result = semantic_search(&query_text);
         result?
     } else {
-        match keyword_search_with_params(params, &directory) {
+        match keyword_search_with_params(params, entry_type, &directory) {
             Ok(res) => res,
             Err(e) => {
                 return Err(format!("Search failed: {}", e).into());

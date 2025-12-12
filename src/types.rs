@@ -78,15 +78,23 @@ pub enum Commands {
     /// Start the clipboard/shell monitor
     Run,
     /// Search using natural language (alternatively use ja <QUERY>)
+    #[command(alias = "ja")]
     Ask {
         query: String,
+
+        #[arg(long, short = 'c', help = "Search clipboard history instead of shell")]
+        clipboard: bool,
 
         #[arg(long)]
         print_only: bool,
     },
     /// Search using keywords (alternatively use js <QUERY>)
+    #[command(alias = "js")]
     Search {
         query: String,
+
+        #[arg(long, short = 'c', help = "Search clipboard history instead of shell")]
+        clipboard: bool,
 
         #[arg(long)]
         print_only: bool,
@@ -175,16 +183,18 @@ pub struct Entry {
     pub embedding: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EntryType {
     Clipboard,
     Shell,
+    Any,
 }
 
 #[allow(dead_code)]
 impl EntryType {
     pub fn as_str(&self) -> &str {
         match self {
+            EntryType::Any => "any",
             EntryType::Clipboard => "clipboard",
             EntryType::Shell => "shell",
         }
@@ -195,6 +205,7 @@ impl EntryType {
 impl fmt::Display for EntryType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            EntryType::Any => write!(f, "any"),
             EntryType::Clipboard => write!(f, "clipboard"),
             EntryType::Shell => write!(f, "shell"),
         }

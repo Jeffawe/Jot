@@ -83,7 +83,7 @@ impl AdaptivePromptBuilder {
     ) -> String {
         match self.model_params {
             ModelSize::Tiny => self.build_tiny_prompt(query, samples),
-            ModelSize::Small => self.build_small_prompt(query, samples),
+            ModelSize::Small => self.build_small_prompt(query, directory, samples),
             ModelSize::Medium => self.build_medium_prompt(query, directory, samples),
             ModelSize::Large => self.build_large_prompt(query, directory, samples),
         }
@@ -100,7 +100,7 @@ impl AdaptivePromptBuilder {
         format!(
 r#"Output JSON only. No text before or after.
 
-Format: {{"keywords":[],"entry_types":null,"time_range":null,"use_semantic":false}}
+Format: {{"keywords":[],"time_range":null}}
 
 Examples in history:
 {}
@@ -114,36 +114,29 @@ JSON:"#,
     }
     
     /// Compact prompt for small models (1-3B)
-    fn build_small_prompt(&self, query: &str, samples: &[Sample]) -> String {
+    fn build_small_prompt(&self, query: &str, directory: &str, samples: &[Sample]) -> String {
         let samples_text = self.format_samples_compact(&samples[..samples.len().min(5)]);
-        
-        let few_shot = self.get_best_few_shot_examples(2);
-        let few_shot_text = if !few_shot.is_empty() {
-            format!("Past successful searches:\n{}\n", self.format_few_shot(&few_shot))
-        } else {
-            String::new()
-        };
         
         format!(
 r#"Convert query to JSON. Output ONLY valid JSON, no other text.
 
 Format:
-{{"keywords":[],"entry_types":null,"time_range":null,"use_semantic":false}}
+{{"keywords":[],"time_range":null,"filters":{{"working_dir":null}}}}
 
 Rules:
 - keywords: Array of search terms (expand abbreviations, e.g., "push code" → ["git", "push"])
-- entry_types: "shell" or "clipboard"
 - time_range: "today", "yesterday", "last_week", "last_month" or leave null if not applies
-- use_semantic: true if vague (use only for clipboard entry_types)
+- filters.working_dir: Directory context (use if query mentions location)
 
-{}Similar commands in history:
+Similar commands in history:
 {}
 
 Query: "{}"
+Current directory: "{}"
 JSON:"#,
-            few_shot_text,
             samples_text,
-            query
+            query,
+            directory
         )
     }
     
@@ -162,11 +155,10 @@ JSON:"#,
 r#"Convert the natural language query into structured search parameters. Return ONLY valid JSON.
 
 Output format:
-{{"keywords":[],"entry_types":null,"time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":false}}
+{{"keywords":[],"time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":false}}
 
 Field definitions:
 - keywords: Array of search terms (expand abbreviations, e.g., "push code" → ["git", "push"])
-- entry_types: "shell" for commands, "clipboard" for copied text, null for both
 - time_range: "today", "yesterday", "last_week", "last_month", or null
 - use_semantic: true for vague queries (should only be true if entry type is clipboard)
 
@@ -199,11 +191,10 @@ JSON output:"#,
 r#"You are a terminal history search assistant. Convert natural language queries into structured search parameters.
 
 Output format (JSON only, no additional text):
-{{"keywords":[],"entry_types":null,"time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":false}}
+{{"keywords":[],"time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":false}}
 
 Parameter specifications:
 - keywords: Extract search terms. Expand common abbreviations (e.g., "push code" → ["git", "push", "origin"])
-- entry_types: "shell" for terminal commands, "clipboard" for copied content, null for both
 - time_range: Temporal filter - "today", "yesterday", "last_week", "last_month", or null
 - custom_start/custom_end: Unix timestamps for custom date ranges (usually null)
 - filters.working_dir: Directory context (use if query mentions location)

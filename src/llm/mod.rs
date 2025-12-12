@@ -16,8 +16,6 @@ pub use manager::GLOBAL_LLM;
 pub struct LLMQueryParams {
     pub keywords: Vec<String>,
     #[serde(default)]
-    pub entry_types: Option<String>,
-    #[serde(default)]
     pub time_range: Option<SimpleTimeRange>,
     #[serde(default)]
     pub custom_start: Option<i64>,

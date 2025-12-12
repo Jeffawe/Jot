@@ -18,13 +18,15 @@
 
 ## 🎯 Use Cases
 
+Uses jotx ask (ja for short) for natural language search and search (js for short) for normal keyword search
+
 ```bash
 # Instead of scrolling through terminal history
 jotx ask "ssh command for staging server"
 → ssh user@staging.example.com -i ~/.ssh/key.pem
 
-# Find that email you copied hours ago
-ja "email address from this morning"
+# Find that email you copied hours ago (-c means search in clipboard history)
+ja -c "email address from this morning"
 → john.doe@example.com
 
 # Find that yarn command to run the server
