@@ -2,9 +2,6 @@
 
 > Your digital memory. Search everything you've copied or typed, instantly.
 
-> ⚠️ **WARNING: Active Development**  
-> jot is currently in active development and not ready for production use. Features are incomplete and bugs are expected.
-
 **jot** is a fully local, privacy-first AI assistant that remembers your clipboard history and terminal commands. Ask questions in natural language and get instant answers, no scrolling, no searching, just results.
 
 [![Release](https://img.shields.io/github/v/release/Jeffawe/Jot)](https://github.com/Jeffawe/Jot/releases)
@@ -72,28 +69,14 @@ jotx ask "what was that git command from yesterday?"
 
 ### Natural Language Search
 
-1. **Monitors** your clipboard and terminal silently in the background
-2. **Stores** everything locally in a local SQLite database
+1. **Monitors** clipboard and terminal commands using rust copypasta and shell hooks
+2. **Stores** everything locally in a local SQLite database `(~/.jotx/jotx.db)`
 3. **Indexes** content using embedding models for semantic search
-4. **Searches** using natural language to find what you need
-
-### CLI Commands
-
-```bash
-# Search with natural language
-jotx ask "docker command with port mapping"
-jotx search "yarn" 
-```
+4. **Searches** using natural language and pluggable LLm models (via ollama) to query db and give results fast
 
 ### GUI Mode
 
-```bash
-# Launch the desktop app
-jotx gui
-
-# Or use global hotkey (configurable)
-Cmd+Shift+J  # macOS default
-```
+Install the GUI version from https://github.com/Jeffawe/Jot/releases and look for the desktop release
 
 ## ⚙️ Configuration
 
@@ -103,7 +86,7 @@ Configuration file: `~/.jotx/config.toml`
 [llm]
 provider = "ollama"
 api_base = "http://localhost:11434"
-model = "qwen2.5:1.5b"
+model = "qwen2.5:3b"
 max_tokens = 500
 temperature = 0.7
 max_history_results = 10
@@ -123,27 +106,9 @@ maintenance_interval_days = 7
 
 - ✅ **100% Local** - No data ever leaves your machine
 - ✅ **No Telemetry** - Zero analytics or tracking
-- ✅ **Configurable Exclusions** - Block apps, files, or patterns (In development)
+- ✅ **Configurable Exclusions** - Block apps, files, or patterns `(run jotx privacy)`
 - ✅ **Open Source** - Fully auditable code
-- ✅ **Clean Data** - Clean data stored anytime easily
-
-<!-- ### Exclusion System
-
-Protect sensitive data automatically:
-
-```bash
-# Exclude specific apps
-jotx config exclude-app "1Password"
-
-# Exclude file patterns
-jotx config exclude-pattern "*.env"
-
-# Exclude folders
-jotx config exclude-folder "~/Documents/Private"
-
-# View exclusions
-jotx config list-exclusions
-``` -->
+- ✅ **Clean Data** - Clean data stored anytime easily `(run jotx clean-data)`
 
 ## 🛠️ Tech Stack
 
@@ -162,11 +127,14 @@ Contributions are welcome! This project is built for learning Rust, so beginner-
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/jot.git
+git clone https://github.com/jeffawe/jot.git
 cd jot
 
-# Install dependencies
-make dev-build OR cargo build
+# Install dependencies (Full Setup)
+make setup 
+
+#Install dependencies (Run Rust code)
+cargo build
 
 # Run tests
 cargo test
@@ -175,7 +143,7 @@ cargo test
 ### Areas for Contribution
 
 - 🐛 Bug fixes
-- 📝 Documentation improvements
+- 📝 AI development
 - ✨ New search algorithms
 - 🎨 UI/UX enhancements
 - 🔧 Performance optimizations

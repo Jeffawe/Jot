@@ -6,6 +6,7 @@ use std::process::Command;
 
 const SETUP_HOOK_SCRIPT: &str = include_str!("scripts/setup_hook.sh");
 const INSTALL_LLM_SCRIPT: &str = include_str!("scripts/install_llm.sh");
+const INSTALL_SQLITE_VEC_SCRIPT: &str = include_str!("scripts/install_sqlite_vec.sh");
 
 // ============================================================================
 // INSTALL (make install)
@@ -84,6 +85,39 @@ pub fn setup_hooks() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "Please run: source ~/.zshrc  (or ~/.bashrc) for all terminal sessions or restart your terminal"
         );
+        Ok(())
+    } else {
+        Err("Failed to setup hooks".into())
+    }
+}
+
+// ============================================================================
+// INSTALL SQLITE-VEC
+// ============================================================================
+pub fn install_sqlite_vec() -> Result<(), Box<dyn std::error::Error>> {
+    println!("🔗 Setting up sqlite-vec...");
+
+    // Write the embedded script to a temp file
+    let temp_script = "/tmp/jotx_sqlite_vec.sh";
+    fs::write(temp_script, INSTALL_SQLITE_VEC_SCRIPT)?;
+
+    // Make it executable
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(temp_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(temp_script, perms)?;
+    }
+
+    // Run the script
+    let status = Command::new("bash").arg(temp_script).status()?;
+
+    // Clean up temp file
+    let _ = fs::remove_file(temp_script);
+
+    if status.success() {
+        println!("✅ sqlite-vec installed");
         Ok(())
     } else {
         Err("Failed to setup hooks".into())
@@ -192,6 +226,9 @@ pub fn full_setup(force: bool, gui: bool) -> Result<(), Box<dyn std::error::Erro
 
     // 3. Install LLM
     install_llm(force)?;
+    println!();
+
+    install_sqlite_vec()?;
     println!();
 
     // 4. Create jotx directory and save path

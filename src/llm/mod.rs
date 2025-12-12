@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 mod default;
 mod handle_llm;
 mod manager;
+mod prompt;
 
 pub use handle_llm::{
     download_model_with_string, handle_llm, install_ollama, remove_model_with_string,

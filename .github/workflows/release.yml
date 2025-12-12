@@ -100,7 +100,9 @@ jobs:
             ## Installation
 
             ### Quick Install (Recommended)
+            ```bash
             curl -fsSL https://raw.githubusercontent.com/Jeffawe/Jot/main/install.sh | bash
+            ```
 
             ### Manual Installation
             1. Download the binary for your platform below

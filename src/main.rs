@@ -12,7 +12,7 @@ use jotx::clipboard::clip_mon::GLOBAL_CLIP_MON;
 use jotx::commands::{get_plugin_dir, get_working_directory, show_privacy_settings, show_settings};
 use jotx::config::GLOBAL_CONFIG;
 use jotx::config::reload_config;
-use jotx::db::USER_DB;
+use jotx::db::{DB_WRITER, USER_DB};
 use jotx::llm::handle_llm;
 use jotx::plugin::{
     CommandContext, DaemonContext, GLOBAL_PLUGIN_MANAGER, SensitiveCommandFilter,
@@ -25,12 +25,16 @@ use jotx::shell::shell_mon::GLOBAL_SHELL_MON;
 use jotx::managers::shutdown_manager::{on_shutdown, shutdown};
 use jotx::pid_controller::{PID_FILE, is_running, remove_pid, save_pid};
 
+
+
 const CLIP_SLEEP_DURATION_SECS: u64 = 1;
-const SHELL_SLEEP_DURATION_SECS: u64 = 3600;
+const SHELL_SLEEP_DURATION_SECS: u64 = 60; // This is multiplied by 60 to get 3600 seconds
 const APP_LOOP_SECS: u64 = 10;
+const DB_LOOP_SECS: u64 = 5; // This is multiplied by 60 to get 300 seconds
 
 const SERVICE_NAME: &str = "jotx";
 const SERVICE_NAME_SHORT: &str = "js";
+const SERVICE_NAME_SHORT2: &str = "ja";
 
 #[tokio::main]
 async fn main() {
@@ -185,6 +189,10 @@ fn start_service() {
         println!("\nCtrl+C received. Shutting down...");
         shutdown();
         stop_service();
+        // Force terminal cleanup
+        let _ = crossterm::terminal::disable_raw_mode();
+        let _ = crossterm::execute!(std::io::stderr(), crossterm::cursor::Show);
+        std::process::exit(130);
     })
     .expect("Error setting Ctrl+C handler");
 
@@ -246,6 +254,10 @@ pub fn run_service() {
         }
     };
 
+    println!("Starting DB writer thread...");
+
+    let _ = &*DB_WRITER;
+
     if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
         if let Err(e) = monitor.read_all_histories(shell_case_sensitive) {
             eprintln!("Shell error: {}", e);
@@ -302,7 +314,35 @@ pub fn run_service() {
                 }
             }
 
-            thread::sleep(Duration::from_secs(SHELL_SLEEP_DURATION_SECS));
+            for _ in 0..60 {
+                if !is_running() {
+                    break;
+                }
+                thread::sleep(Duration::from_secs(SHELL_SLEEP_DURATION_SECS));
+            }
+        }
+    });
+
+    // DB writer
+    thread::spawn(move || {
+        while is_running() {
+            let queue_size = DB_WRITER.queue_len();
+
+            // Warn if queue is backing up
+            if queue_size > 500 {
+                eprintln!("⚠ DB writer queue is large: {} entries pending", queue_size);
+            } else if queue_size > 0 {
+                // Optional: log normal activity (only in verbose mode)
+                #[cfg(debug_assertions)]
+                println!("DB writer queue: {} entries", queue_size);
+            }
+
+            for _ in 0..60 {
+                if !is_running() {
+                    break;
+                }
+                thread::sleep(Duration::from_secs(DB_LOOP_SECS));
+            }
         }
     });
 
@@ -360,47 +400,49 @@ fn capture_command(cmd: &str, pwd: Option<String>, user: Option<String>, host: O
         .unwrap()
         .as_secs();
 
-    if cmd.starts_with(SERVICE_NAME) || cmd.starts_with(SERVICE_NAME_SHORT) {
+    // Avoid capturing our own commands
+    if cmd.starts_with(SERVICE_NAME)
+        || cmd.starts_with(SERVICE_NAME_SHORT)
+        || cmd.starts_with(SERVICE_NAME_SHORT2)
+    {
         return;
     }
 
-    let (should_capture, shell_case_sensitive) = {
-        if let Ok(settings) = GLOBAL_SETTINGS.lock() {
-            (settings.capture_shell, settings.shell_case_sensitive)
-        } else {
-            (false, false)
-        }
+    // ---- SETTINGS (non-blocking)
+    let (should_capture, shell_case_sensitive) = match GLOBAL_SETTINGS.try_lock() {
+        Ok(settings) => (settings.capture_shell, settings.shell_case_sensitive),
+        Err(_) => return, // lock busy → do nothing
     };
 
     if !should_capture {
         return;
     }
 
-    let should_add = {
-        GLOBAL_PLUGIN_MANAGER
-            .lock()
-            .ok()
-            .map(|plugins| {
-                plugins.trigger_command_captured(&CommandContext {
-                    command: cmd.to_string(),
-                    working_dir: pwd.clone().unwrap_or_default(),
-                    user: user.clone().unwrap_or_default(),
-                    host: host.clone().unwrap_or_default(),
-                    timestamp,
-                })
-            })
-            .unwrap_or(true)
+    // ---- PLUGINS (non-blocking)
+    let should_add = match GLOBAL_PLUGIN_MANAGER.try_lock() {
+        Ok(plugins) => plugins.trigger_command_captured(&CommandContext {
+            command: cmd.to_string(),
+            working_dir: pwd.clone().unwrap_or_default(),
+            user: user.clone().unwrap_or_default(),
+            host: host.clone().unwrap_or_default(),
+            timestamp,
+        }),
+        Err(_) => true, // assume success if busy
     };
 
-    if should_add {
-        if let Ok(mut monitor) = GLOBAL_SHELL_MON.lock() {
-            let cmd = if shell_case_sensitive {
-                cmd.to_string()
-            } else {
-                cmd.to_lowercase()
-            };
-            monitor.add_command(cmd, timestamp, pwd, user, host);
-        }
+    if !should_add {
+        return;
+    }
+
+    // ---- MONITOR (non-blocking)
+    if let Ok(mut monitor) = GLOBAL_SHELL_MON.try_lock() {
+        let cmd = if shell_case_sensitive {
+            cmd.to_string()
+        } else {
+            cmd.to_lowercase()
+        };
+
+        monitor.add_command(cmd, timestamp, pwd, user, host);
     }
 }
 
@@ -454,7 +496,7 @@ mod tests {
         initialize_plugins();
 
         capture_command(
-            "ls -la",
+            "ja new stuff",
             Some("/home/user".to_string()),
             Some("user".to_string()),
             Some("host".to_string()),

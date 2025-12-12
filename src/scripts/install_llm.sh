@@ -88,7 +88,7 @@ fi
 
 echo ""
 
-DEFAULT_MODEL="qwen2.5:1.5b"
+DEFAULT_MODEL="qwen2.5:3b"
 
 echo -e "${YELLOW}→ Checking for model: ${DEFAULT_MODEL}${NC}"
 

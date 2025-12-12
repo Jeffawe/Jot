@@ -2,6 +2,8 @@ use std::process::Command;
 use colored::*;
 use reqwest::Client;
 
+use crate::config::GLOBAL_CONFIG;
+
 pub async fn handle_llm() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "╔════════════════════════════════════════╗".cyan());
     println!("{}", "║        JotX LLM Management             ║".cyan());
@@ -135,6 +137,11 @@ fn download_model() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n{} Model downloaded!", "✓".green());
     } else {
         println!("\n{} Download failed", "✗".red());
+    }
+
+    let config = GLOBAL_CONFIG.try_write();
+    if let Ok(mut config) = config {
+        let _ = config.update_llm_model(model.to_string());
     }
     
     Ok(())

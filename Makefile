@@ -1,4 +1,4 @@
-.PHONY: all install hooks setup start stop status clean rebuild help uninstall install-llm clean-data clean-llm dev-build dev-run dev-test dev-check logs errors db-info restart
+.PHONY: all install hooks setup install-sqlite-vec start stop status clean rebuild help uninstall install-llm clean-data clean-llm dev-build dev-run dev-test dev-check logs errors db-info restart
 
 # Default target
 all: help
@@ -57,13 +57,27 @@ install-llm:
 		echo "   You can install later with: make install-llm or use jotx handle-llm"; \
 	fi
 
+install-sqlite-vec:
+	@echo "📦 Jotx requires sqlite-vec to work. We will install it for you!"
+	@echo ""
+	@chmod +x ./src/scripts/install_sqlite_vec.sh; \
+	if ./src/scripts/install_sqlite_vec.sh; then \
+		echo ""; \
+		echo "✅ sqlite-vec setup complete!"; \
+	else \
+		echo ""; \
+		echo "❌ Installation failed. Try downloading sqlite-vec manually:"; \
+		echo "   https://github.com/asg017/sqlite-vec/releases"; \
+		exit 1; \
+	fi
+
 hooks:
 	@echo "🔗 Setting up shell hooks..."
 	@chmod +x ./src/scripts/setup_hook.sh
 	@./src/scripts/setup_hook.sh
 	@echo "Please run: source ~/.zshrc  (or ~/.bashrc) for all terminal sessions or restart your terminal"
 
-setup: install hooks install-llm
+setup: install hooks install-sqlite-vec install-llm
 	@mkdir -p $(JOTX_DIR)
 	@echo "$(PWD)" > $(JOTX_DIR)/path
 	@echo ""

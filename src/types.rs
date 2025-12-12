@@ -77,7 +77,7 @@ pub struct PluginArgs {
 pub enum Commands {
     /// Start the clipboard/shell monitor
     Run,
-    /// Search using natutal language (alternatively use ja <QUERY>)
+    /// Search using natural language (alternatively use ja <QUERY>)
     Ask {
         query: String,
 

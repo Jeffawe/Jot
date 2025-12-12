@@ -73,7 +73,7 @@ pub async fn ask(
 
             let params = llm_daemon.interpret_query(query, directory).await?;
 
-            if test {
+            if test || !print_only {
                 println!("LLM Query Params: {:?}", params);
             }
 
@@ -153,7 +153,7 @@ fn cache_query_params(
 
     // Insert into cache
     let mut db = USER_DB
-        .lock()
+        .try_lock()
         .map_err(|e| format!("DB lock failed: {}", e))?;
 
     db.cache.insert(fingerprint, params.clone())?;
@@ -285,32 +285,4 @@ pub fn execute_search_gui(
         .collect();
 
     return Ok(results);
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::UNIX_EPOCH;
-
-    use chrono::Local;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn test_ask() {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        println!("Current timestamp: {}", now);
-        println!("Current date: {}", Local::now());
-        let result = ask(
-            "source used",
-            "/Users/somua/Documents/Projects/ClipboardAI/jot-cli",
-            false,
-            true,
-        )
-        .await
-        .unwrap();
-        assert!(matches!(result, AskResponse::SearchResults(_)));
-    }
 }

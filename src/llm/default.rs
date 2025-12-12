@@ -3,6 +3,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::commands::get_working_directory;
+use crate::db::{SampleSelector, SampleStrategy};
+use crate::llm::prompt::AdaptivePromptBuilder;
 use crate::plugin::{GLOBAL_PLUGIN_MANAGER, LlmContext};
 
 use super::{LLMQueryParams, LlmModel};
@@ -11,6 +13,7 @@ pub struct OllamaModel {
     client: Client,
     api_base: String,
     model: String,
+    prompt_builder: AdaptivePromptBuilder,
 }
 
 #[derive(Serialize)]
@@ -37,6 +40,7 @@ impl OllamaModel {
         Self {
             client: Client::new(),
             api_base,
+            prompt_builder: AdaptivePromptBuilder::new(model.clone()),
             model,
         }
     }
@@ -86,29 +90,35 @@ impl OllamaModel {
         Ok(ollama_response.response)
     }
 
+    // fn build_interpret_prompt(&self, query: &str, directory: &str) -> String {
+    //     format!(
+    //         r#"Convert query to JSON. Output ONLY valid JSON.
+    //         Format:
+    //         {{"keywords":[],"entry_types":null,"time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":false}}
+    //         Rules:
+    //         - entry_types: "shell", "clipboard", or null
+    //         - time_range: "today", "yesterday", "last_week", "last_month", or null
+    //         - use_semantic: true if vague, false if specific
+    //         Examples:
+    //         "git commit yesterday" → {{"keywords":["git","commit"],"entry_types":"shell","time_range":"yesterday","custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":false}}
+    //         "connect server" → {{"keywords":["ssh"],"entry_types":"shell","time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":true}}
+    //         "copied rust code" → {{"keywords":["rust"],"entry_types":"clipboard","time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":true}}
+    //         Query: "{query}"
+    //         Directory: "{directory}"
+    //         JSON:"#,
+    //                     query = query,
+    //                     directory = directory
+    //                 )
+    // }
+
     fn build_interpret_prompt(&self, query: &str, directory: &str) -> String {
-        format!(
-            r#"Convert query to JSON. Output ONLY valid JSON.
-
-Format:
-{{"keywords":[],"entry_types":null,"time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":false}}
-
-Rules:
-- entry_types: "shell", "clipboard", or null
-- time_range: "today", "yesterday", "last_week", "last_month", or null
-- use_semantic: true if vague, false if specific
-
-Examples:
-"git commit yesterday" → {{"keywords":["git","commit"],"entry_types":"shell","time_range":"yesterday","custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":false}}
-"connect server" → {{"keywords":["ssh"],"entry_types":"shell","time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":true}}
-"copied rust code" → {{"keywords":["rust"],"entry_types":"clipboard","time_range":null,"custom_start":null,"custom_end":null,"filters":{{"working_dir":null,"app_name":null}},"use_semantic":true}}
-
-Query: "{query}"
-Directory: "{directory}"
-JSON:"#,
-            query = query,
-            directory = directory
-        )
+        let sample_count = self.prompt_builder.get_recommended_sample_count();
+        let mut sample_selector = SampleSelector {};
+        let samples = sample_selector
+            .get_samples(query, sample_count, SampleStrategy::Adaptive)
+            .unwrap_or_default();
+        let prompt = self.prompt_builder.build_prompt(query, directory, &samples);
+        prompt
     }
 
     fn build_answer_prompt(&self, query: &str) -> String {
@@ -133,6 +143,8 @@ impl LlmModel for OllamaModel {
         temperature: f32,
     ) -> Result<LLMQueryParams, Box<dyn std::error::Error>> {
         let prompt = self.build_interpret_prompt(query, directory);
+
+        println!("Prompt: {}", prompt);
         let response = self.generate(&prompt, max_tokens, temperature).await?;
 
         // More aggressive cleaning

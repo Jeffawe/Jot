@@ -7,9 +7,11 @@ use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
 mod cache;
+mod db_writer;
 mod sample_generator;
 
-pub use sample_generator::SampleSelector;
+pub use db_writer::DB_WRITER;
+pub use sample_generator::{Sample, SampleSelector, SampleStrategy};
 
 use cache::FingerprintCache;
 
@@ -70,16 +72,43 @@ impl Database {
     fn init_schema(&self) -> Result<()> {
         unsafe {
             self.conn.load_extension_enable()?;
-            // Try to load vec0 extension - handle gracefully if not available
-            match self.conn.load_extension("vec0", None::<&str>) {
-                Ok(_) => println!("✓ sqlite-vec extension loaded"),
-                Err(e) => {
-                    eprintln!(
-                        "⚠ sqlite-vec not available: {}. Vector search will be disabled.",
-                        e
-                    );
-                    eprintln!("  Install from: https://github.com/asg017/sqlite-vec");
+
+            // Build list of paths to try
+            let mut extension_paths = Vec::new();
+
+            if cfg!(target_os = "macos") {
+                if let Ok(home) = std::env::var("HOME") {
+                    extension_paths.push(format!("{}/.local/lib/vec0", home));
                 }
+                extension_paths.push("/usr/local/lib/vec0".to_string());
+            } else if cfg!(target_os = "linux") {
+                if let Ok(home) = std::env::var("HOME") {
+                    extension_paths.push(format!("{}/.local/lib/vec0", home));
+                }
+                extension_paths.push("/usr/local/lib/vec0".to_string());
+            } else if cfg!(target_os = "windows") {
+                if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                    extension_paths.push(format!("{}\\sqlite-vec\\vec0", localappdata));
+                }
+            }
+
+            // Always try bare "vec0" as last resort
+            extension_paths.push("vec0".to_string());
+
+            let mut loaded = false;
+            for path in &extension_paths {
+                match self.conn.load_extension(path, None::<&str>) {
+                    Ok(_) => {
+                        loaded = true;
+                        break;
+                    }
+                    Err(_) => continue,
+                }
+            }
+
+            if !loaded {
+                eprintln!("⚠ sqlite-vec not available. Vector search will use fallback.");
+                eprintln!("  Install from: https://github.com/asg017/sqlite-vec");
             }
         }
 
@@ -144,8 +173,6 @@ impl Database {
             [],
         ) {
             Ok(_) => {
-                println!("✓ Vector search table created");
-
                 // Optional: Create triggers to keep vec_entries in sync with entries
                 self.conn.execute(
                     "CREATE TRIGGER IF NOT EXISTS vec_entries_ai 
@@ -274,6 +301,19 @@ impl Database {
             [],
         )?;
 
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS prompt_examples (
+                query TEXT PRIMARY KEY,
+                keywords TEXT NOT NULL,
+                entry_type TEXT,
+                time_range TEXT,
+                use_semantic BOOLEAN NOT NULL,
+                success_rate REAL NOT NULL,
+                usage_count INTEGER NOT NULL
+            )",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -362,9 +402,9 @@ impl Database {
             )
             .ok();
 
-        let entry_id = if let Some((id, exisitng_working_dir)) = existing {
+        let entry_id = if let Some((id, existing_working_dir)) = existing {
             // Check if existing working dir is null/empty
-            let existing_dir_empty = exisitng_working_dir
+            let existing_dir_empty = existing_working_dir
                 .as_ref()
                 .map(|h| h.trim().is_empty())
                 .unwrap_or(true);
@@ -392,7 +432,7 @@ impl Database {
                     ],
                 )?;
                 id
-            } else if exisitng_working_dir == working_dir.map(|h| h.to_string()) {
+            } else if existing_working_dir == working_dir.map(|h| h.to_string()) {
                 // Same command + same working dir: increment times_run
                 self.conn.execute(
                     "UPDATE entries 

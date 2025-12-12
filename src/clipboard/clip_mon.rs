@@ -3,11 +3,10 @@ use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::CLIPBOARD_DB;
+use crate::db::{DB_WRITER};
 
 use crate::context::get_context;
 use crate::types::{ClipboardEntry, SimplifiedWindowInfo};
-use crate::embeds::{generate_embedding};
 
 pub struct ClipMon {
     ctx: ClipboardContext,
@@ -76,20 +75,13 @@ impl ClipMon {
     }
 
     pub fn add_to_db(&self, entry: &ClipboardEntry) -> Result<(), Box<dyn std::error::Error>> {
-        let db = CLIPBOARD_DB
-            .lock()
-            .map_err(|e| format!("DB lock error: {}", e))?;
-
-        let embeds = generate_embedding(&entry.content)?;
-
-        db.insert_clipboard(
-            &entry.content,
+        // Queue immediately - returns in <1ms
+        DB_WRITER.insert_clipboard(
+            entry.content.clone(),
             entry.timestamp,
-            &entry.context.info.name,
-            &entry.context.title,
-            Some(embeds),
-        )?;
-        Ok(())
+            entry.context.info.name.clone(),
+            entry.context.title.clone(),
+        )
     }
 }
 

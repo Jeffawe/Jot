@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::SHELL_DB;
-use crate::embeds::generate_embedding;
+use crate::db::{DB_WRITER, SHELL_DB};
 use crate::types::ShellEntry;
 
 pub struct ShellMon {}
@@ -44,7 +43,7 @@ impl ShellMon {
                 } else {
                     cmd.to_lowercase()
                 };
-                
+
                 if let Err(e) = self.add_or_increment(cmd, timestamp) {
                     eprintln!("Error adding zsh command: {}", e);
                 }
@@ -121,23 +120,22 @@ impl ShellMon {
     }
 
     pub fn add_to_db(&self, entry: &ShellEntry) -> Result<(), Box<dyn std::error::Error>> {
-        let db = SHELL_DB
-            .lock()
-            .map_err(|e| format!("DB lock error: {}", e))?;
-
-        if let Ok(embeds) = generate_embedding(&entry.content) {
-            db.insert_shell(
-                &entry.content,
-                entry.timestamp,
-                entry.working_dir.as_deref(),
-                entry.user.as_deref(),
-                entry.host.as_deref(),
-                "Terminal",
-                "unknown",
-                Some(embeds),
-            )?;
+        match self.fallback_to_writer(entry) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
         }
+    }
 
+    fn fallback_to_writer(&self, entry: &ShellEntry) -> Result<(), Box<dyn std::error::Error>> {
+        DB_WRITER.insert_shell(
+            entry.content.clone(),
+            entry.timestamp,
+            entry.working_dir.clone(),
+            entry.user.clone(),
+            entry.host.clone(),
+            "Terminal".to_string(),
+            "unknown".to_string(),
+        )?;
         Ok(())
     }
 

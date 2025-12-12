@@ -72,13 +72,13 @@ impl SampleSelector {
         };
 
         let mut stmt = conn.prepare(
-            "SELECT e.id, e.content, e.times_run, v.distance
-         FROM vec_entries v
-         JOIN entries e ON e.id = v.entry_id
-         WHERE v.embedding MATCH ?1
-           AND e.entry_type = 'command'
-         ORDER BY distance ASC
-         LIMIT ?2",
+            "SELECT e.id, e.content, e.times_run,
+            vec_distance_cosine(v.embedding, ?1) AS distance
+            FROM vec_entries v
+            JOIN entries e ON e.id = v.entry_id
+            WHERE e.entry_type = 'shell'
+            ORDER BY distance ASC
+            LIMIT ?2",
         )?;
 
         let all_samples: Vec<(i64, String, f32, f32, i32)> = stmt

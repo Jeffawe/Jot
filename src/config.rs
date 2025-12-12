@@ -64,7 +64,7 @@ impl Default for Config {
                 provider: "ollama".to_string(),
                 api_key: None,
                 api_base: Some("http://localhost:11434".to_string()),
-                model: "qwen2.5:1.5b".to_string(),
+                model: "qwen2.5:3b".to_string(),
                 max_tokens: 500,
                 temperature: 0.3,
                 max_history_results: 10,
@@ -141,6 +141,12 @@ impl Config {
         privacy: PrivacyConfig,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.privacy = privacy;
+        self.save()?;
+        Ok(())
+    }
+
+    pub fn update_llm_model(&mut self, model: String) -> Result<(), Box<dyn std::error::Error>> {
+        self.llm.model = model;
         self.save()?;
         Ok(())
     }
